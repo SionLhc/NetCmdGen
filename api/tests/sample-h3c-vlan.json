@@ -1,0 +1,18 @@
+{
+  "vendor": "h3c",
+  "feature": "vlan",
+  "params": {
+    "vlans": [
+      {"id": 10, "name": "Office"},
+      {"id": 20, "name": "Guest"}
+    ],
+    "interfaces": [
+      {"interface": "GigabitEthernet1/0/1", "link_type": "access", "vlan_id": 10},
+      {"interface": "GigabitEthernet1/0/24", "link_type": "trunk", "pvid": 1, "trunk_vlans": [10, 20]}
+    ],
+    "vlanifs": [
+      {"vlan_id": 10, "ip_address": "192.168.10.1", "mask": "255.255.255.0", "description": "Office GW"}
+    ],
+    "stp": {"enable": true, "mode": "rstp", "priority": 4096}
+  }
+}

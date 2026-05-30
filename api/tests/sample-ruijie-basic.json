@@ -1,0 +1,10 @@
+{
+  "vendor": "ruijie",
+  "feature": "basic",
+  "params": {
+    "hostname": "RG-SW",
+    "password": {"value": "Ruijie@123", "encrypted": false},
+    "enable_ssh": true,
+    "user": {"username": "admin", "password": "Admin@123", "level": 15}
+  }
+}
