@@ -25,6 +25,7 @@ export interface GenerateReq {
 export interface GenerateFullReq {
   vendor: string
   config: Record<string, unknown>
+  vrp_version?: 'v5' | 'v8' | 'v300'
   topology_context?: Record<string, unknown>
   scene?: 'campus_core' | 'campus_access' | 'campus_agg'
 }

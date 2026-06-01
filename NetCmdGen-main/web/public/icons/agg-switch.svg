@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 48" width="80" height="48">
+  <defs>
+    <linearGradient id="asTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7a8fa8"/>
+      <stop offset="100%" stop-color="#4d6580"/>
+    </linearGradient>
+    <linearGradient id="asFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#92a6c0"/>
+      <stop offset="100%" stop-color="#637b96"/>
+    </linearGradient>
+  </defs>
+  <polygon points="8,18 72,18 76,14 12,14" fill="url(#asTop)" stroke="#3a4d63" stroke-width="0.6"/>
+  <polygon points="72,18 76,14 76,38 72,42" fill="#4d6580" stroke="#3a4d63" stroke-width="0.6"/>
+  <rect x="8" y="18" width="64" height="24" fill="url(#asFront)" stroke="#3a4d63" stroke-width="0.8"/>
+  <rect x="12" y="24" width="56" height="8" fill="#1a2e4a" stroke="#0d1b2e" stroke-width="0.5"/>
+  <rect x="14" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="18" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="22" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="26" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="30" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="34" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="38" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="42" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="46" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="50" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="54" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="58" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="62" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <rect x="66" y="25.5" width="2.5" height="5" fill="#67e23a"/>
+  <circle cx="14" cy="37" r="1.2" fill="#67e23a"/>
+  <circle cx="18" cy="37" r="1.2" fill="#67e23a"/>
+</svg>

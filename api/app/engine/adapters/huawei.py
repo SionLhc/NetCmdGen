@@ -3,6 +3,8 @@
 华为 Generator 类（BasicConfigGenerator / VLANConfigGenerator / ...）均为细粒度
 静态方法，无统一 dict 入口。本 Adapter 负责将 API 侧的 ``(feature, params)``
 映射到具体的方法调用，并组装多段输出。
+
+支持 VRP 版本选择：V5（默认）/ V8 / V300。
 """
 from __future__ import annotations
 
@@ -11,10 +13,11 @@ from typing import Any, Dict, List
 from app.engine.base import FeatureNotSupported
 from app.engine.vendors.huawei.basic import BasicConfigGenerator
 from app.engine.vendors.huawei.vlan import VLANConfigGenerator
-
-# 后续补齐 routing/security/interface/qos 的 import
-# from app.engine.vendors.huawei.routing import RoutingConfigGenerator
-# from app.engine.vendors.huawei.security import SecurityConfigGenerator
+from app.engine.vendors.huawei.routing import RoutingConfigGenerator
+from app.engine.vendors.huawei.security import SecurityConfigGenerator
+from app.engine.vendors.huawei.interface import InterfaceConfigGenerator
+from app.engine.vendors.huawei.qos import QoSConfigGenerator
+from app.engine.vendors.huawei.version_config import VrpVersion
 
 
 class HuaweiAdapter:
@@ -83,19 +86,22 @@ class HuaweiAdapter:
     def _gen_vlan(self, params: Dict[str, Any]) -> str:
         return VLANConfigGenerator.generate_vlan_all(params)
 
-    # ── routing / security / interface / qos (TODO) ─────────
+    # ── routing / security / interface / qos ──────────────
     def _gen_routing(self, params: Dict[str, Any]) -> str:
-        # 后续 import RoutingConfigGenerator 后实现
-        return "# routing 模板待接入\n"
+        """生成路由配置（静态路由 / OSPF / BGP / RIP / 默认路由）。"""
+        return RoutingConfigGenerator.generate_route_all(params)
 
     def _gen_security(self, params: Dict[str, Any]) -> str:
-        return "# security 模板待接入\n"
+        """生成安全配置（ACL / 端口安全 / MAC绑定 / 802.1X / RADIUS / DHCP Snooping 等）。"""
+        return SecurityConfigGenerator.generate_security_all(params)
 
     def _gen_interface(self, params: Dict[str, Any]) -> str:
-        return "# interface 模板待接入\n"
+        """生成接口配置（Eth-Trunk 聚合 / LACP / LLDP / PoE / 端口隔离 / 环路检测 / 限速）。"""
+        return InterfaceConfigGenerator.generate_interface_all(params)
 
     def _gen_qos(self, params: Dict[str, Any]) -> str:
-        return "# qos 模板待接入\n"
+        """生成 QoS 配置（流分类 / 流行为 / 流策略 / 队列调度 / 带宽策略）。"""
+        return QoSConfigGenerator.generate_qos_all(params)
 
     # ── 统一入口 ─────────────────────────────────────────────
     _GEN = {
@@ -115,14 +121,33 @@ class HuaweiAdapter:
             )
         return fn(self, params)
 
-    def generate_full(self, config: Dict[str, Any]) -> str:
+    def generate_full(self, config: Dict[str, Any],
+                      vrp_version: str = "v5") -> str:
+        """生成完整配置，支持 VRP 版本区分。
+
+        Args:
+            config: 配置字典，顶层 key 为 basic/vlan/routing/security/interface/qos
+            vrp_version: VRP 系统版本（v5 / v8 / v300），默认 v5
+        """
+        version = VrpVersion(vrp_version) if vrp_version in ("v5", "v8", "v300") else VrpVersion.V5
+
         sections = [
-            "#\n# 华为交换机配置脚本\n#",
+            "#\n# 华为交换机配置脚本 (VRP {})\n#".format(version.value.upper()),
             f"# 生成时间: {config.get('description', '')}",
             "#\n",
         ]
+
         for key in ("basic", "vlan", "routing", "security", "interface", "qos"):
             if key in config:
-                sections.append(self.generate(key, config[key]))
-        sections.append("\nreturn")
+                if key == "basic":
+                    # 基础配置使用版本感知的批量生成
+                    sections.append(
+                        BasicConfigGenerator.generate_basic_all(config[key], version)
+                    )
+                else:
+                    sections.append(self.generate(key, config[key]))
+
+        # V300 不需要 return，V5/V8 保留
+        if version != VrpVersion.V300:
+            sections.append("\nreturn")
         return "\n".join(sections)

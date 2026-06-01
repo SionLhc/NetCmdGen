@@ -1,168 +1,395 @@
 <template>
-  <el-card class="gen-card">
-    <template #header>
-      <div class="gen-header">
-        <span class="title">配置命令生成器</span>
-        <el-select v-model="vendor" placeholder="选择厂商" style="width: 160px" @change="onVendorChange">
-          <el-option v-for="v in vendorStore.vendors" :key="v.code" :label="v.name" :value="v.code" />
-        </el-select>
-        <el-select v-model="feature" placeholder="选择特性" style="width: 140px">
-          <el-option v-for="f in currentFeatures" :key="f" :label="f" :value="f" />
-        </el-select>
-      </div>
-    </template>
+  <div class="workbench-page">
+    <!-- 顶部 Tab 切换 -->
+    <div class="wb-tabs-bar">
+      <el-radio-group v-model="activeTab" size="default">
+        <el-radio-button value="config">⚙ 配置生成</el-radio-button>
+        <el-radio-button value="project">📁 拓扑项目</el-radio-button>
+      </el-radio-group>
+      <span v-if="activeTab === 'project'" style="margin-left:12px;font-size:12px;color:#909399">
+        从拓扑导入 → 逐台生成命令 → 保存 → 一键导出 MD
+      </span>
+    </div>
 
-    <el-row :gutter="16">
-      <!-- 参数面板 -->
-      <el-col :span="10">
-        <el-card shadow="never" class="param-card">
-          <template #header>参数配置</template>
-          <div class="param-form">
-            <el-alert v-if="!vendor" title="请先选择厂商" type="info" :closable="false" />
-            <template v-else>
-              <el-form :model="params" label-width="100px" size="default">
-                <el-form-item label="主机名">
-                  <el-input v-model="params.hostname" placeholder="SW-CORE-01" />
-                </el-form-item>
-                <el-form-item label="VLAN ID">
-                  <el-input-number v-model="params.vlan_id" :min="1" :max="4094" />
-                </el-form-item>
-                <el-form-item label="VLAN 名称">
-                  <el-input v-model="params.vlan_name" placeholder="Office" />
-                </el-form-item>
-                <el-form-item label="接口">
-                  <el-input v-model="params.interface" placeholder="GigabitEthernet0/0/1" />
-                </el-form-item>
-                <el-form-item label="接口类型">
-                  <el-select v-model="params.link_type" style="width: 100%">
-                    <el-option label="access" value="access" />
-                    <el-option label="trunk" value="trunk" />
-                  </el-select>
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" @click="onGenerate" :loading="generating">生成命令</el-button>
-                  <el-button @click="onGenerateFull" :loading="generating">生成完整脚本</el-button>
-                  <el-button @click="onCopy" :disabled="!output">复制</el-button>
-                </el-form-item>
-              </el-form>
+    <!-- ═══ Tab: 配置生成 ═══ -->
+    <div v-show="activeTab === 'config'" class="wb-tab-content">
+      <!-- 工具栏 -->
+      <div class="wb-toolbar">
+        <div class="wb-left">
+          <span class="wb-title">命令工作台</span>
+          <el-select v-model="scene" placeholder="设备场景" size="default" @change="onSceneChange" style="width:140px">
+            <el-option v-for="s in sceneList" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+          <el-divider direction="vertical" />
+          <span class="vendor-label">厂商:</span>
+          <el-select v-model="activeVendor" placeholder="选择厂商" size="default" style="width:140px">
+            <el-option v-for="v in vendorStore.vendors" :key="v.code" :label="v.name" :value="v.code" />
+          </el-select>
+          <el-select v-if="activeVendor === 'huawei'" v-model="vrpVersion" size="default" style="width:120px">
+            <el-option label="VRP V5" value="v5" />
+            <el-option label="VRP V8" value="v8" />
+            <el-option label="VRP V300" value="v300" />
+          </el-select>
+          <el-divider direction="vertical" />
+          <el-dropdown @command="handleLoadTemplate" trigger="click">
+            <el-button size="default" plain>加载模板 <el-icon><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="t in allTemplates" :key="t.id" :command="t.id">
+                  <div class="template-item"><span class="template-name">{{ t.name }}</span><span class="template-desc">{{ t.desc }}</span></div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
             </template>
-          </div>
-        </el-card>
-      </el-col>
+          </el-dropdown>
+          <el-button size="default" plain @click="batchVisible = true">批量设备</el-button>
+          <el-button v-if="topoStore.exportedDevices.length > 0" type="warning" size="default" plain @click="topoImportVisible = true">从拓扑导入 ({{ topoStore.exportedDevices.length }})</el-button>
+        </div>
+        <div class="wb-right">
+          <el-button type="primary" size="default" @click="onGenerateAll" :loading="generating" :disabled="!activeVendor">生成完整命令</el-button>
+          <el-button type="success" size="default" @click="onCompareAll" :loading="generating">对比全部厂商</el-button>
+          <el-button @click="onCopyAll" :disabled="allOutputs.length===0" size="default">复制</el-button>
+          <el-button @click="handleExport" :disabled="allOutputs.length===0" size="default">导出 .cfg</el-button>
+          <el-button @click="onClear" size="default">清空</el-button>
+        </div>
+      </div>
 
-      <!-- 命令输出 -->
-      <el-col :span="14">
-        <el-card shadow="never" class="output-card">
-          <template #header>
-            <span>生成结果</span>
+      <!-- 主内容 -->
+      <div class="wb-body">
+        <div class="wb-form">
+          <el-tabs v-model="activeFormTab" class="form-tabs">
+            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :key="'basic-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="VLAN" name="vlan"><VlanForm v-model="formVlan" :key="'vlan-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="路由" name="routing"><RoutingForm v-model="formRouting" :key="'rout-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="安全" name="security"><SecurityForm v-model="formSecurity" :key="'sec-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="接口" name="interface"><InterfaceForm v-model="formInterface" :key="'if-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="服务" name="service" v-if="hasService"><ServiceForm v-model="formService" :key="'svc-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="QoS" name="qos" v-if="scene.includes('core')"><QosForm v-model="formQos" :key="'qos-'+formKey" /></el-tab-pane>
+          </el-tabs>
+        </div>
+        <div class="wb-output">
+          <template v-if="allOutputs.length > 0">
+            <el-tabs v-model="activeOutputTab" type="card" class="output-tabs">
+              <el-tab-pane v-for="(out, idx) in allOutputs" :key="idx" :label="out.vendorName" :name="String(idx)">
+                <div class="output-info-bar">
+                  <span>{{ out.vendorName }} — {{ out.lines }} 行</span>
+                  <span style="display:flex;gap:8px">
+                    <el-button v-if="projectEditing" text size="small" type="warning" @click="saveToProject(out.output)">💾 保存到项目</el-button>
+                    <el-button text size="small" @click="copyOne(out.output)">复制</el-button>
+                  </span>
+                </div>
+                <pre class="output-block"><code>{{ out.output }}</code></pre>
+              </el-tab-pane>
+            </el-tabs>
+            <el-checkbox v-model="showDiff" style="margin:8px 16px" size="small">并排对比（{{ allOutputs.length }} 厂商）</el-checkbox>
+            <div v-if="showDiff" class="diff-view">
+              <div v-for="(out, idx) in allOutputs" :key="'d'+idx" class="diff-col">
+                <div class="diff-header">{{ out.vendorName }}</div>
+                <div class="diff-body"><pre class="diff-block"><code>{{ formatDiff(out.output) }}</code></pre></div>
+              </div>
+            </div>
           </template>
-          <pre class="output-block"><code>{{ output || '← 选择厂商和特性后点击生成' }}</code></pre>
-        </el-card>
-      </el-col>
-    </el-row>
-  </el-card>
+          <div v-else class="output-empty">
+            <span class="empty-icon">⚙</span>
+            <p>选择设备场景和厂商，配置参数后</p>
+            <p><strong>点击"生成完整命令"</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Tab: 拓扑项目 ═══ -->
+    <div v-show="activeTab === 'project'" class="wb-tab-content">
+      <ProjectView ref="projectViewRef" @edit-device="onProjectDeviceEdit" />
+    </div>
+
+    <!-- 批量设备对话框 -->
+    <el-dialog v-model="batchVisible" title="批量设备生成" width="900px" top="5vh">
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:center">
+        <el-select v-model="batchVendor" placeholder="厂商" size="small" style="width:140px"><el-option v-for="v in vendorStore.vendors" :key="v.code" :label="v.name" :value="v.code" /></el-select>
+        <el-select v-model="batchScene" placeholder="场景" size="small" style="width:140px"><el-option v-for="s in sceneList" :key="s.id" :label="s.name" :value="s.id" /></el-select>
+        <el-button size="small" @click="batchAddRow">+ 添加设备</el-button>
+        <el-button size="small" plain @click="batchImportCsv">📄 导入CSV</el-button>
+        <span style="font-size:12px;color:#909399;margin-left:auto">当前 {{ batchDevices.length }} 台设备</span>
+      </div>
+      <div style="max-height:420px;overflow:auto">
+        <el-table :data="batchDevices" size="small" border>
+          <el-table-column type="index" label="#" width="44" />
+          <el-table-column label="主机名" min-width="140"><template #default="{row}"><el-input v-model="row.hostname" size="small" placeholder="SW-01" /></template></el-table-column>
+          <el-table-column label="管理IP" min-width="140"><template #default="{row}"><el-input v-model="row.mgmtIp" size="small" placeholder="192.168.1.1" /></template></el-table-column>
+          <el-table-column label="VLAN范围" min-width="160"><template #default="{row}"><el-input v-model="row.vlanRange" size="small" placeholder="10,20,30-50" /></template></el-table-column>
+          <el-table-column label="描述" min-width="140"><template #default="{row}"><el-input v-model="row.description" size="small" placeholder="接入层交换机" /></template></el-table-column>
+          <el-table-column label="操作" width="60" fixed="right"><template #default="{$index}"><el-button link type="danger" size="small" @click="batchDevices.splice($index,1)">删除</el-button></template></el-table-column>
+        </el-table>
+      </div>
+      <div v-if="batchResults.length > 0" style="margin-top:12px">
+        <el-divider>生成结果</el-divider>
+        <div style="max-height:300px;overflow:auto">
+          <div v-for="(r,i) in batchResults" :key="i" style="margin-bottom:8px;border:1px solid #ebeef5;border-radius:6px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;background:#f5f7fa;font-size:12px;cursor:pointer" @click="r.expanded=!r.expanded">
+              <span><span :style="{color:r.error?'#f56c6c':'#67c23a',fontWeight:600}">{{ r.hostname }}</span> — {{ r.error ? '失败' : r.lines+' 行' }}</span>
+              <span style="display:flex;gap:8px"><el-button link size="small" @click.stop="copyOne(r.output)">复制</el-button><span style="color:#909399">{{ r.expanded ? '▲' : '▼' }}</span></span>
+            </div>
+            <pre v-show="r.expanded" style="background:#1a1b2e;color:#c9d1d9;padding:8px 12px;margin:0;font-size:12px;line-height:1.5;max-height:200px;overflow:auto;white-space:pre-wrap">{{ r.output }}</pre>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="batchVisible = false">关闭</el-button>
+        <el-button type="primary" @click="batchGenerateAll" :loading="batchGenerating" :disabled="!batchVendor||batchDevices.length===0">生成全部 {{ batchDevices.length }} 台设备</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 从拓扑导入对话框 -->
+    <el-dialog v-model="topoImportVisible" title="从拓扑导入设备" width="700px">
+      <el-table :data="topoStore.exportedDevices" size="small" highlight-current-row @row-click="onTopoDeviceClick">
+        <el-table-column type="index" label="#" width="44" />
+        <el-table-column prop="hostname" label="主机名" min-width="120" />
+        <el-table-column prop="typeName" label="类型" width="110"><template #default="{row}"><el-tag :type="typeTagFromRow(row)" size="small">{{ row.typeName }}</el-tag></template></el-table-column>
+        <el-table-column prop="mgmtIp" label="管理IP" width="140" />
+        <el-table-column prop="vlans" label="VLAN" min-width="120" />
+        <el-table-column label="操作" width="80" fixed="right"><template #default="{row}"><el-button link type="primary" size="small" @click.stop="loadTopoDevice(row)">加载</el-button></template></el-table-column>
+      </el-table>
+      <div style="margin-top:10px;font-size:12px;color:#909399">点击行直接加载参数并关闭</div>
+      <template #footer><el-button @click="topoImportVisible = false">关闭</el-button></template>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useVendorStore } from '@/stores/vendor'
-import { generate, generateFull } from '@/api'
+import { useTopologyStore, type TopologyDevice } from '@/stores/topology'
+import { ArrowDown } from '@element-plus/icons-vue'
+import { generateFull as apiGenerateFull } from '@/api'
+import { getAllTemplates, getTemplateById } from '@/data/templates'
+import ProjectView from '@/components/generator/ProjectView.vue'
+import BasicForm from '@/components/generator/BasicForm.vue'
+import VlanForm from '@/components/generator/VlanForm.vue'
+import RoutingForm from '@/components/generator/RoutingForm.vue'
+import SecurityForm from '@/components/generator/SecurityForm.vue'
+import InterfaceForm from '@/components/generator/InterfaceForm.vue'
+import QosForm from '@/components/generator/QosForm.vue'
+import ServiceForm from '@/components/generator/ServiceForm.vue'
 
 const vendorStore = useVendorStore()
-const vendor = ref('')
-const feature = ref('vlan')
-const output = ref('')
+const topoStore = useTopologyStore()
+const activeTab = ref<'config' | 'project'>('config')
+const projectViewRef = ref<InstanceType<typeof ProjectView> | null>(null)
+
+interface SceneDef { id: string; name: string; desc: string; features: string[] }
+const sceneList: SceneDef[] = [
+  { id: 'core-switch', name: '核心交换机', desc: '园区/数据中心核心层', features: ['basic','vlan','routing','security','interface','qos','service'] },
+  { id: 'agg-switch', name: '汇聚交换机', desc: '园区汇聚层', features: ['basic','vlan','routing','security','interface','service'] },
+  { id: 'access-switch', name: '接入交换机', desc: '终端接入层', features: ['basic','vlan','security','interface','service'] },
+  { id: 'router', name: '出口路由器', desc: '网络出口/边界', features: ['basic','routing','security','interface','service'] },
+  { id: 'firewall', name: '防火墙', desc: '安全网关', features: ['basic','routing','security','interface','service'] },
+]
+
+const scene = ref('core-switch')
+const activeVendor = ref('')
+const vrpVersion = ref<'v5'|'v8'|'v300'>('v8')
+const activeFormTab = ref('basic')
+const activeOutputTab = ref('0')
+const showDiff = ref(false)
 const generating = ref(false)
+const formKey = ref(0)
+const projectEditing = ref(false)
 
-const currentFeatures = computed(() => {
-  const v = vendorStore.vendors.find((x) => x.code === vendor.value)
-  return v?.features ?? []
-})
+const formBasic = ref<Record<string,any>>({})
+const formVlan = ref<Record<string,any>>({})
+const formRouting = ref<Record<string,any>>({})
+const formSecurity = ref<Record<string,any>>({})
+const formInterface = ref<Record<string,any>>({})
+const formQos = ref<Record<string,any>>({})
+const formService = ref<Record<string,any>>({})
 
-const params = ref({
-  hostname: 'SW-CORE-01',
-  vlan_id: 10,
-  vlan_name: 'Office',
-  interface: 'GigabitEthernet0/0/1',
-  link_type: 'access',
-})
+const hasService = computed(() => sceneList.find(x => x.id === scene.value)?.features.includes('service') ?? false)
+
+interface OutputItem { vendor: string; vendorName: string; output: string; lines: number }
+const allOutputs = ref<OutputItem[]>([])
 
 onMounted(() => vendorStore.loadVendors())
 
-function onVendorChange() {
-  output.value = ''
+function onSceneChange() { activeFormTab.value = 'basic'; allOutputs.value = [] }
+
+function buildFullConfig(): Record<string, any> {
+  return { description: `场景: ${sceneList.find(x=>x.id===scene.value)?.name||''}`,
+    basic: {...formBasic.value}, vlan: {...formVlan.value}, routing: {...formRouting.value},
+    security: {...formSecurity.value}, interface: {...formInterface.value},
+    service: {...formService.value}, qos: {...formQos.value} }
 }
 
-async function onGenerate() {
-  if (!vendor.value) return ElMessage.warning('请选择厂商')
-  generating.value = true
+async function onGenerateAll() {
+  if (!activeVendor.value) { ElMessage.warning('请选择厂商'); return }
+  generating.value = true; allOutputs.value = []
+  const config = buildFullConfig()
+  const vObj = vendorStore.vendors.find(v => v.code === activeVendor.value)
   try {
-    const res = await generate({
-      vendor: vendor.value,
-      feature: feature.value,
-      params: {
-        vlans: [{ id: params.value.vlan_id, name: params.value.vlan_name }],
-        interfaces: [{
-          interface: params.value.interface,
-          type: params.value.link_type,
-          vlan_id: params.value.vlan_id,
-        }],
-      },
-    })
-    output.value = res.output
+    const vrp = activeVendor.value === 'huawei' ? vrpVersion.value : undefined
+    const res = await apiGenerateFull({ vendor: activeVendor.value, config, vrp_version: vrp })
+    allOutputs.value.push({ vendor: activeVendor.value, vendorName: vObj?.name || activeVendor.value, output: res.output, lines: res.output.split('\n').length })
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '生成失败')
-  } finally {
-    generating.value = false
+    allOutputs.value.push({ vendor: activeVendor.value, vendorName: vObj?.name || activeVendor.value, output: `# 生成失败: ${e.response?.data?.detail||e.message}`, lines: 1 })
   }
+  generating.value = false; activeOutputTab.value = '0'
+  ElMessage.success('生成完成')
 }
 
-async function onGenerateFull() {
-  if (!vendor.value) return ElMessage.warning('请选择厂商')
-  generating.value = true
-  try {
-    const res = await generateFull({
-      vendor: vendor.value,
-      config: {
-        description: 'NetCmdGen Demo',
-        basic: {
-          hostname: params.value.hostname,
-          enable_ssh: true,
-        },
-        vlan: {
-          vlans: [{ id: params.value.vlan_id, name: params.value.vlan_name }],
-          interfaces: [{
-            interface: params.value.interface,
-            type: params.value.link_type,
-            vlan_id: params.value.vlan_id,
-          }],
-        },
-      },
-    })
-    output.value = res.output
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '生成失败')
-  } finally {
-    generating.value = false
+async function onCompareAll() {
+  generating.value = true; allOutputs.value = []
+  const config = buildFullConfig()
+  for (const v of vendorStore.vendors) {
+    try {
+      const vrp = v.code === 'huawei' ? vrpVersion.value : undefined
+      const res = await apiGenerateFull({ vendor: v.code, config, vrp_version: vrp })
+      allOutputs.value.push({ vendor: v.code, vendorName: v.name, output: res.output, lines: res.output.split('\n').length })
+    } catch (e: any) { allOutputs.value.push({ vendor: v.code, vendorName: v.name, output: `# 失败: ${(e as Error).message}`, lines: 1 }) }
   }
+  generating.value = false; activeOutputTab.value = '0'; showDiff.value = true
+  ElMessage.success(`已对比 ${allOutputs.value.length} 个厂商`)
 }
 
-function onCopy() {
-  navigator.clipboard.writeText(output.value)
-  ElMessage.success('已复制到剪贴板')
+function onCopyAll() { const idx = Number(activeOutputTab.value); const out = allOutputs.value[idx]; if (out) { navigator.clipboard.writeText(out.output); ElMessage.success('已复制') } }
+function copyOne(text: string) { navigator.clipboard.writeText(text); ElMessage.success('已复制') }
+function onClear() { allOutputs.value = []; Object.keys({formBasic,formVlan,formRouting,formSecurity,formInterface,formQos,formService}).forEach(k => (eval(k).value = {})); showDiff.value = false }
+function formatDiff(output: string): string { return output.split('\n').map((line,i)=>`${String(i+1).padStart(4,' ')}  ${line}`).join('\n') }
+
+// 模板加载
+const allTemplates = getAllTemplates()
+function handleLoadTemplate(id: string) {
+  const tpl = getTemplateById(id); if (!tpl) return
+  scene.value = tpl.scene; activeVendor.value = tpl.vendor; activeFormTab.value = 'basic'
+  const c = tpl.config
+  formBasic.value = c.basic||{}; formVlan.value = c.vlan||{}; formRouting.value = c.routing||{}
+  formSecurity.value = c.security||{}; formInterface.value = c.interface||{}; formQos.value = c.qos||{}; formService.value = c.service||{}
+  formKey.value++; ElMessage.success(`已加载模板: ${tpl.name}`)
+}
+
+// 导出
+function handleExport() {
+  const out = allOutputs.value[Number(activeOutputTab.value)]; if (!out) return
+  const sname = sceneList.find(s=>s.id===scene.value)?.name||'device'
+  const fname = `${formBasic.value.hostname||'NetCmdGen'}_${sname}_${out.vendor}.cfg`.replace(/\s+/g,'_')
+  const b = new Blob([out.output],{type:'text/plain;charset=utf-8'}); const u = URL.createObjectURL(b)
+  const a = document.createElement('a'); a.href=u; a.download=fname; a.click(); URL.revokeObjectURL(u)
+  ElMessage.success(`已导出: ${fname}`)
+}
+
+// 拓扑导入
+function typeTagFromRow(row: TopologyDevice): string { return row.type.includes('core')?'':row.type.includes('router')?'danger':row.type.includes('firewall')?'warning':'success' }
+const topoImportVisible = ref(false)
+const typeToScene: Record<string,string> = { 'core-switch':'core-switch','agg-switch':'agg-switch','access-switch':'access-switch','router':'router','firewall':'firewall' }
+
+function onTopoDeviceClick(row: TopologyDevice) { loadTopoDevice(row) }
+function parseVlanIds(str: string): Array<{id:number;name:string}> {
+  if (!str.trim()) return []
+  const ids = new Set<number>()
+  for (const p of str.split(',')) { const t=p.trim(); if(t.includes('-')){ const [s,e]=t.split('-').map(Number); if(!isNaN(s)&&!isNaN(e)) for(let i=s;i<=Math.min(e,s+50);i++) ids.add(i) } else { const n=Number(t); if(!isNaN(n)&&n>=1&&n<=4094) ids.add(n) } }
+  return [...ids].map(id=>({id,name:`VLAN${id}`}))
+}
+function loadTopoDevice(dev: TopologyDevice) {
+  scene.value = typeToScene[dev.type] || 'access-switch'
+  formBasic.value = { hostname: dev.hostname, mgmt_ip: dev.mgmtIp, enable_ssh: true, ssh_port: 22 }
+  const vids = parseVlanIds(dev.vlans||'')
+  if (vids.length>0) formVlan.value = { vlans: vids, interfaces: vids.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id})) }
+  if (dev.ports && dev.ports.length > 0) {
+    formInterface.value = { eth_trunks: dev.ports.filter((p:any)=>p.direction==='uplink').map((p:any,i:number)=>({trunk_id:i+1,mode:p.linkType==='trunk'?'lacp':'manual',members:[p.interface],description:`To-${p.remoteDevice}`})) }
+  }
+  formRouting.value={}; formSecurity.value={}; formQos.value={}; formService.value={}
+  formKey.value++; topoImportVisible.value = false
+  ElMessage.success(`已加载: ${dev.hostname}`)
+}
+
+// 项目编辑
+function onProjectDeviceEdit(dev: TopologyDevice & { vendor?: string; ports?: any[] }) {
+  scene.value = typeToScene[dev.type]||'access-switch'
+  if (dev.vendor) activeVendor.value = dev.vendor
+  formBasic.value = { hostname: dev.hostname, mgmt_ip: dev.mgmtIp, enable_ssh: true, ssh_port: 22 }
+  const vids = parseVlanIds(dev.vlans||'')
+  if (vids.length>0) formVlan.value = { vlans: vids, interfaces: vids.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id})) }
+  // 从端口数据预填接口配置（Eth-Trunk等）
+  if (dev.ports && dev.ports.length > 0) {
+    const uplinkPorts = dev.ports.filter((p: any) => p.direction === 'uplink')
+    if (uplinkPorts.length > 0) {
+      formInterface.value = {
+        eth_trunks: uplinkPorts.map((p: any, i: number) => ({
+          trunk_id: i + 1, mode: p.linkType === 'trunk' ? 'lacp' : 'manual',
+          members: [p.interface],
+          description: `To-${p.remoteDevice}`,
+        })),
+      }
+    }
+  }
+  formRouting.value={}; formSecurity.value={}; formQos.value={}; formService.value={}
+  formKey.value++; activeTab.value = 'config'; projectEditing.value = true
+  ElMessage.success(`已加载设备: ${dev.hostname}，含 ${(dev.ports||[]).length} 个端口连接`)
+}
+function saveToProject(output: string) {
+  projectViewRef.value?.saveDeviceCommand(output, activeVendor.value)
+  projectEditing.value = false
+  ElMessage.success('命令已保存到项目，切换「拓扑项目」Tab 查看')
+}
+
+// 批量设备
+const batchVisible = ref(false); const batchVendor = ref(''); const batchScene = ref('access-switch'); const batchGenerating = ref(false)
+interface BatchDevice { hostname: string; mgmtIp: string; vlanRange: string; description: string }
+const batchDevices = ref<BatchDevice[]>([{hostname:'SW-ACC-01',mgmtIp:'192.168.1.11',vlanRange:'10',description:'1F接入交换机'},{hostname:'SW-ACC-02',mgmtIp:'192.168.1.12',vlanRange:'20',description:'2F接入交换机'}])
+interface BatchResult { hostname: string; output: string; lines: number; error: boolean; expanded: boolean }
+const batchResults = ref<BatchResult[]>([])
+function batchAddRow() { const n = batchDevices.value.length + 1; batchDevices.value.push({hostname:`SW-${String(n).padStart(2,'0')}`,mgmtIp:'',vlanRange:'',description:''}) }
+function batchImportCsv() {
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.csv'
+  inp.onchange=async e=>{ const f=(e.target as HTMLInputElement).files?.[0]; if(!f)return; const t=await f.text(); const ls=t.split('\n').filter(l=>l.trim()); if(ls.length<2){ElMessage.warning('CSV至少需要标题行+1行数据');return}
+    const h=ls[0].toLowerCase().split(',').map(x=>x.trim()); const hi=h.indexOf('hostname'); const ii=Math.max(h.indexOf('ip'),h.indexOf('mgmt_ip')); const vi=h.indexOf('vlan'); const di=Math.max(h.indexOf('description'),h.indexOf('desc'))
+    batchDevices.value=[]; for(let i=1;i<ls.length;i++){const c=ls[i].split(',').map(x=>x.trim()); if(c.length<h.length)continue
+    batchDevices.value.push({hostname:hi>=0?c[hi]:`SW-${i}`,mgmtIp:ii>=0?c[ii]:'',vlanRange:vi>=0?c[vi]:'',description:di>=0?c[di]:''})}
+    ElMessage.success(`已导入 ${batchDevices.value.length} 台设备`) }; inp.click()
+}
+async function batchGenerateAll() {
+  if (!batchVendor.value) { ElMessage.warning('请选择厂商'); return }
+  batchGenerating.value = true; batchResults.value = []
+  for (const dev of batchDevices.value) {
+    const vlans = parseVlanIds(dev.vlanRange)
+    const config: Record<string,any> = { description: dev.description||'批量生成', basic: { hostname: dev.hostname, mgmt_ip: dev.mgmtIp }, vlan: vlans.length>0?{vlans,interfaces:vlans.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id}))}:{}, routing:{}, security:{}, interface:{}, service:{} }
+    try { const vrp = batchVendor.value==='huawei'?vrpVersion.value:undefined; const res = await apiGenerateFull({ vendor: batchVendor.value, config, vrp_version: vrp })
+      batchResults.value.push({ hostname: dev.hostname, output: res.output, lines: res.output.split('\n').length, error: false, expanded: false })
+    } catch (e: any) { batchResults.value.push({ hostname: dev.hostname, output: `# 失败: ${e.response?.data?.detail||(e as Error).message}`, lines: 1, error: true, expanded: true }) }
+  }
+  batchGenerating.value = false; ElMessage.success(`已生成 ${batchResults.value.length} 台设备`)
 }
 </script>
 
 <style scoped>
-.gen-card { height: 100%; }
-.gen-header { display: flex; align-items: center; gap: 12px; }
-.gen-header .title { font-size: 16px; font-weight: bold; flex: 1; }
-.param-form { padding: 8px 0; }
-.output-block {
-  background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 6px;
-  font-family: 'Consolas', 'Courier New', monospace; font-size: 13px;
-  min-height: 400px; max-height: calc(100vh - 260px); overflow: auto;
-  white-space: pre-wrap; word-break: break-all;
-}
+.workbench-page { height: 100%; display: flex; flex-direction: column; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04); }
+.wb-tabs-bar { display: flex; align-items: center; padding: 10px 20px; background: #fafbfc; border-bottom: 1px solid #f0f0f0; }
+.wb-tab-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.wb-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; background: #fff; border-bottom: 1px solid #f0f0f0; flex-wrap: wrap; gap: 12px; }
+.wb-left { display: flex; align-items: center; gap: 12px; }
+.wb-title { font-size: 17px; font-weight: 700; color: #1e293b; margin-right: 4px; }
+.vendor-label { font-size: 13px; color: #64748b; font-weight: 500; }
+.wb-right { display: flex; gap: 8px; }
+.wb-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.wb-form { width: 440px; border-right: 1px solid #f0f0f0; background: #fafbfc; overflow-y: auto; }
+.wb-output { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+.form-tabs :deep(.el-tabs__header) { padding: 0 16px; margin: 0; position: sticky; top: 0; background: #fafbfc; z-index: 10; border-bottom: 1px solid #e8ecf1; }
+.form-tabs :deep(.el-tabs__nav-wrap::after) { display: none; }
+.form-tabs :deep(.el-tabs__content) { padding: 12px 16px; }
+.output-tabs { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.output-tabs :deep(.el-tabs__header) { margin: 0; padding: 0 12px; background: #fff; border-bottom: 1px solid #e8ecf1; }
+.output-tabs :deep(.el-tabs__item) { color: #64748b; font-size: 13px; }
+.output-tabs :deep(.el-tabs__item.is-active) { color: #6366f1; }
+.output-tabs :deep(.el-tabs__content) { flex: 1; overflow: hidden; min-height: 0; }
+.output-tabs :deep(.el-tab-pane) { height: 100%; display: flex; flex-direction: column; }
+.output-info-bar { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; background: #f8f9fb; color: #64748b; font-size: 12px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0; }
+.output-block { flex: 1; background: #1a1b2e; color: #c9d1d9; padding: 16px 20px; margin: 0; font-family: 'JetBrains Mono','Fira Code','Consolas',monospace; font-size: 13px; line-height: 1.8; overflow: auto; white-space: pre-wrap; word-break: break-all; tab-size: 4; min-height: 0; }
+.output-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; gap: 8px; font-size: 14px; background: #f8f9fb; }
+.diff-view { display: flex; gap: 1px; background: #2d2d3d; flex: 1; overflow: auto; }
+.diff-col { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.diff-header { padding: 6px 12px; background: #1a1b2e; color: #818cf8; font-size: 12px; font-weight: 600; text-align: center; border-bottom: 1px solid #2d2d3d; flex-shrink: 0; }
+.diff-body { flex: 1; overflow: hidden; display: flex; min-height: 0; }
+.diff-block { flex: 1; background: #1a1b2e; color: #c9d1d9; padding: 10px 12px; margin: 0; font-family: 'JetBrains Mono','Consolas',monospace; font-size: 11px; line-height: 1.5; overflow: auto; white-space: pre-wrap; word-break: break-all; min-height: 0; }
+.template-item { display: flex; flex-direction: column; gap: 2px; }
+.template-name { font-size: 14px; font-weight: 500; color: #303133; }
+.template-desc { font-size: 11px; color: #909399; }
 </style>

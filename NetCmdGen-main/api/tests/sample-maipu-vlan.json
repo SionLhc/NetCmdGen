@@ -1,0 +1,10 @@
+{
+  "vendor": "maipu",
+  "feature": "vlan",
+  "params": {
+    "vlans": [{"id": 100, "name": "Server"}, {"id": 200, "name": "Client"}],
+    "interfaces": [
+      {"interface": "GigabitEthernet1/0/1", "type": "access", "vlan_id": 100}
+    ]
+  }
+}

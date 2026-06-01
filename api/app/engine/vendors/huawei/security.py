@@ -18,11 +18,12 @@ class SecurityConfigGenerator:
         if description:
             config_lines.append(f" description {description}\n")
         
-        for rule in rules:
+        for idx, rule in enumerate(rules):
             action = rule.get("action", "permit")
             source = rule.get("source")
             source_wildcard = rule.get("source_wildcard", "0.0.0.0")
-            rule_id = rule.get("id")
+            # 自动生成 rule ID（5, 10, 15...），用户也可显式指定 id
+            rule_id = rule.get("id", (idx + 1) * 5)
             
             rule_str = f" rule {rule_id} {action} source"
             if source:
@@ -44,7 +45,7 @@ class SecurityConfigGenerator:
         if description:
             config_lines.append(f" description {description}\n")
         
-        for rule in rules:
+        for idx, rule in enumerate(rules):
             action = rule.get("action", "permit")
             protocol = rule.get("protocol", "ip")
             source = rule.get("source", "any")
@@ -52,7 +53,8 @@ class SecurityConfigGenerator:
             dest = rule.get("destination", "any")
             dst_wildcard = rule.get("destination_wildcard")
             dest_port = rule.get("dest_port")
-            rule_id = rule.get("id")
+            # 自动生成 rule ID（5, 10, 15...）
+            rule_id = rule.get("id", (idx + 1) * 5)
             
             rule_str = f" rule {rule_id} {action} {protocol}"
             if source and source != "any":

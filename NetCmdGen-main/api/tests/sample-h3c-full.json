@@ -1,0 +1,25 @@
+{
+  "vendor": "h3c",
+  "config": {
+    "description": "Demo H3C Switch",
+    "basic": {
+      "hostname": "SW-CORE-01",
+      "enable_ssh": true,
+      "ssh": {"port": 22, "timeout": 60, "max_auth_attempts": 5, "version": "2"},
+      "ssh_user": {"username": "admin", "password": "Admin@123", "type": "password"}
+    },
+    "vlan": {
+      "vlans": [{"id": 10, "name": "Office"}, {"id": 20, "name": "Guest"}],
+      "interfaces": [
+        {"interface": "GigabitEthernet1/0/1", "link_type": "access", "vlan_id": 10}
+      ],
+      "stp": {"enable": true, "mode": "rstp", "priority": 4096}
+    },
+    "routing": {
+      "static": [
+        {"destination": "10.0.0.0", "mask": "255.255.255.0", "next_hop": "192.168.1.254"}
+      ],
+      "default": {"next_hop": "192.168.1.254"}
+    }
+  }
+}

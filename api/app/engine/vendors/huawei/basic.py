@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-NetOps Toolkit - 基础配置模块（增强版）
+NetOps Toolkit - 基础配置模块（支持 VRP V5/V8/V300 版本差异）
 """
+from __future__ import annotations
+
+from app.engine.vendors.huawei.version_config import (
+    VrpVersion, get_cmd as vcmd,
+)
 
 
 class BasicConfigGenerator:
@@ -14,35 +19,43 @@ class BasicConfigGenerator:
         return f"sysname {hostname}\n"
     
     @staticmethod
-    def generate_password(password: str, encrypted: bool = False) -> str:
-        """生成密码配置"""
-        if encrypted:
-            return f"super password cipher {password}\n"
-        return f"super password simple {password}\n"
+    def generate_password(password: str, encrypted: bool = False,
+                          vrp_version: VrpVersion = VrpVersion.V5) -> str:
+        """生成特权密码配置（按版本区分格式）"""
+        enc = "cipher" if encrypted else "simple"
+        if vrp_version in (VrpVersion.V8, VrpVersion.V300):
+            return f"super password {enc} {password}\n"
+        return f"super password {enc} {password}\n"
     
     @staticmethod
     def generate_ssh_config(enable: bool = True, 
-                           version: int = 2,
+                           ssh_version: int = 2,
                            port: int = 22,
                            timeout: int = 60,
                            max_auth_tries: int = 5,
-                           rekey_interval: int = 60) -> str:
-        """生成SSH配置"""
+                           rekey_interval: int = 60,
+                           vrp_version: VrpVersion = VrpVersion.V5) -> str:
+        """生成SSH配置（按版本区分命令语法）"""
         config_lines = []
-        config_lines.append("rsa local-key-pair create\n")
-        config_lines.append("stelnet server enable\n")
+        # V300 不需要 rsa key 和 stelnet 单独开启
+        if vrp_version in (VrpVersion.V5, VrpVersion.V8):
+            config_lines.append("rsa local-key-pair create\n")
+            config_lines.append("stelnet server enable\n")
+        else:
+            config_lines.append("ssh server enable\n")
         config_lines.append(f"ssh server port {port}\n")
         config_lines.append(f"ssh server timeout {timeout}\n")
         config_lines.append(f"ssh server max-auth-times {max_auth_tries}\n")
-        config_lines.append(f"ssh server rekey-interval {rekey_interval}\n")
-        config_lines.append("ssh server compatible-huawei-version enable\n")
-        config_lines.append(f"ssh version {version}\n")
-        config_lines.append("ssh user admin\n")
-        config_lines.append("ssh user admin authentication-type password\n")
-        config_lines.append("ssh user admin service-type stelnet\n")
-        config_lines.append("user-interface vty 0 4\n")
-        config_lines.append(" authentication-mode aaa\n")
-        config_lines.append(" protocol inbound ssh\n")
+        if vrp_version == VrpVersion.V5:
+            config_lines.append(f"ssh server rekey-interval {rekey_interval}\n")
+            config_lines.append("ssh server compatible-huawei-version enable\n")
+        elif vrp_version == VrpVersion.V8:
+            config_lines.append("undo ssh server compatible-ssh1x\n")
+        config_lines.append(f"ssh version {ssh_version}\n")
+        config_lines.append(vcmd(vrp_version, "ssh_user", user="admin"))
+        config_lines.append("\n")
+        config_lines.append(vcmd(vrp_version, "user_interface"))
+        config_lines.append("\n")
         return "".join(config_lines)
     
     @staticmethod
@@ -86,11 +99,16 @@ class BasicConfigGenerator:
                          password: str = "admin@123",
                          level: int = 15,
                          encrypted: bool = False,
-                         service_types: list = None) -> str:
-        """生成用户配置"""
+                         service_types: list = None,
+                         vrp_version: VrpVersion = VrpVersion.V5) -> str:
+        """生成AAA用户配置（V5用simple，V8+强制irreversible-cipher）"""
         config_lines = []
         config_lines.append("aaa\n")
-        config_lines.append(f" local-user {username} password {'cipher' if encrypted else 'simple'} {password}\n")
+        if vrp_version == VrpVersion.V5:
+            pw_type = "cipher" if encrypted else "simple"
+        else:
+            pw_type = "irreversible-cipher" if encrypted else "irreversible-cipher"
+        config_lines.append(f" local-user {username} password {pw_type} {password}\n")
         config_lines.append(f" local-user {username} privilege level {level}\n")
         if service_types is None:
             service_types = ["terminal", "ssh", "telnet"]
@@ -101,22 +119,29 @@ class BasicConfigGenerator:
     @staticmethod
     def generate_ntp_config(servers: list = None,
                            timezone: str = "UTC+8",
-                           broadcast_enable: bool = False) -> str:
-        """生成NTP配置"""
+                           broadcast_enable: bool = False,
+                           vrp_version: VrpVersion = VrpVersion.V5) -> str:
+        """生成NTP配置（V5用 ntp-service，V8+用 ntp）"""
         config_lines = []
-        config_lines.append(f"clock timezone {timezone} add 08:00:00\n")
-        
+        # 时区格式
+        if vrp_version == VrpVersion.V5:
+            config_lines.append(f"clock timezone {timezone} add 08:00:00\n")
+        else:
+            config_lines.append(f"clock timezone Beijing add 08:00:00\n")
+
+        # NTP 服务器
+        ntp_prefix = "ntp" if vrp_version in (VrpVersion.V8, VrpVersion.V300) else "ntp-service"
         if servers:
-            for idx, server in enumerate(servers, 1):
+            for server in servers:
                 server_ip = server.get("ip")
                 prefer = server.get("prefer", False)
-                config_lines.append(f"ntp-service unicast-server {server_ip}")
+                config_lines.append(f"{ntp_prefix} unicast-server {server_ip}")
                 if prefer:
                     config_lines.append(" preference")
                 config_lines.append("\n")
         
         if broadcast_enable:
-            config_lines.append("ntp-service broadcast enable\n")
+            config_lines.append(f"{ntp_prefix} broadcast enable\n")
         
         return "".join(config_lines)
     
@@ -247,8 +272,9 @@ class BasicConfigGenerator:
         return "vlan batch 1\n"
     
     @staticmethod
-    def generate_basic_all(config: dict) -> str:
-        """生成完整基础配置"""
+    def generate_basic_all(config: dict,
+                          vrp_version: VrpVersion = VrpVersion.V5) -> str:
+        """生成完整基础配置（支持 VRP 版本选择）"""
         config_lines = ["#\n", "# 基础配置\n", "#\n"]
         
         if "hostname" in config:
@@ -257,17 +283,19 @@ class BasicConfigGenerator:
         if "password" in config:
             config_lines.append(BasicConfigGenerator.generate_password(
                 config["password"]["value"],
-                config["password"].get("encrypted", False)
+                config["password"].get("encrypted", False),
+                vrp_version,
             ))
         
         if config.get("enable_ssh", False):
             config_lines.append("\n#\n# SSH配置\n#\n")
             config_lines.append(BasicConfigGenerator.generate_ssh_config(
-                version=config.get("ssh_version", 2),
+                ssh_version=config.get("ssh_version", 2),
                 port=config.get("ssh_port", 22),
                 timeout=config.get("ssh_timeout", 60),
                 max_auth_tries=config.get("ssh_max_auth_tries", 5),
-                rekey_interval=config.get("ssh_rekey_interval", 60)
+                rekey_interval=config.get("ssh_rekey_interval", 60),
+                vrp_version=vrp_version,
             ))
         
         if config.get("enable_telnet", False):
@@ -296,7 +324,8 @@ class BasicConfigGenerator:
                 config["user"].get("password", "admin@123"),
                 config["user"].get("level", 15),
                 config["user"].get("encrypted", False),
-                config["user"].get("service_types")
+                config["user"].get("service_types"),
+                vrp_version,
             ))
         
         if "ntp" in config:
@@ -304,7 +333,8 @@ class BasicConfigGenerator:
             config_lines.append(BasicConfigGenerator.generate_ntp_config(
                 config["ntp"].get("servers"),
                 config["ntp"].get("timezone", "UTC+8"),
-                config["ntp"].get("broadcast_enable", False)
+                config["ntp"].get("broadcast_enable", False),
+                vrp_version,
             ))
         
         if "snmp" in config:

@@ -37,6 +37,11 @@ class GenerateFullRequest(BaseModel):
         ...,
         description="完整配置字典，顶层 key 通常包含 description/basic/vlan/routing/security/interface/service",
     )
+    vrp_version: str = Field(
+        default="v5",
+        description="华为 VRP 版本：v5 / v8 / v300（其他厂商忽略）",
+        examples=["v8"],
+    )
     topology_context: Optional[Dict[str, Any]] = Field(
         default=None,
         description="拓扑上下文（用于园区网场景）",
@@ -96,7 +101,11 @@ def generate_full(req: GenerateFullRequest) -> GenerateResponse:
         else:
             # 传统方式：使用厂商适配器
             adapter = get_adapter(req.vendor)
-            output = adapter.generate_full(req.config)
+            # 华为适配器支持 VRP 版本参数
+            if req.vendor == "huawei":
+                output = adapter.generate_full(req.config, vrp_version=req.vrp_version)
+            else:
+                output = adapter.generate_full(req.config)
     except VendorNotSupported as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:  # noqa: BLE001

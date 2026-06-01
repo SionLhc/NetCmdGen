@@ -62,11 +62,42 @@ export const useTopologyStore = defineStore('topology', () => {
   // 是否正在生成配置
   const generating = ref(false)
 
+  /** 从拓扑画布导出的设备列表（供命令工作台消费） */
+  const exportedDevices = ref<TopologyDevice[]>([])
+
   return {
     deviceTypes,
     selectedNode,
     selectedEdge,
     configOutput,
     generating,
+    exportedDevices,
   }
 })
+
+/** 拓扑设备快照，供命令工作台导入 */
+export interface TopologyDevice {
+  id: string
+  type: string
+  typeName: string
+  hostname: string
+  mgmtIp: string
+  vlans: string
+  description: string
+  /** 从连线收集的端口信息：{ interface, remoteDevice, linkType, vlanId, ipNetwork }[] */
+  ports: TopologyPort[]
+}
+
+/** 设备端口连接信息 */
+export interface TopologyPort {
+  interface: string
+  remoteDevice: string
+  remotePort: string
+  linkType: string
+  vlanId?: number
+  allowedVlans?: number[]
+  ipNetwork?: string
+  bandwidth?: string
+  /** 该端口是上行(uplink)还是下行(downlink) */
+  direction: 'uplink' | 'downlink'
+}

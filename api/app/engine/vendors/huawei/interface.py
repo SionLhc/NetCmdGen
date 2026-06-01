@@ -75,7 +75,7 @@ class InterfaceConfigGenerator:
         config_lines.append(f"lldp mode {mode}\n")
         config_lines.append(f"lldp message-fasts count {fast_count}\n")
         
-        config_lines.append("lldp transmit interval {interval}\n")
+        config_lines.append(f"lldp transmit interval {interval}\n")
         config_lines.append(f"lldp transmit holdtime {holdtime}\n")
         
         return "".join(config_lines)

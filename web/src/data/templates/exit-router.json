@@ -1,0 +1,112 @@
+{
+  "scene": "router",
+  "name": "出口路由器",
+  "desc": "企业网络出口，含静态路由、OSPF、NAT、ACL安全策略、多运营商分流",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "GW-Router-01",
+      "password": {
+        "value": "R0ut3r@2026",
+        "encrypted": false
+      },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": {
+        "username": "netadmin",
+        "password": "N3t@dm1n",
+        "level": 15
+      },
+      "enable_ntp": true,
+      "ntp": {
+        "servers": [
+          {
+            "ip": "ntp1.aliyun.com"
+          }
+        ]
+      }
+    },
+    "routing": {
+      "static_routes": [
+        {
+          "mask": "0.0.0.0",
+          "dest_network": "0.0.0.0",
+          "next_hop": "100.1.1.1"
+        },
+        {
+          "mask": "255.255.0.0",
+          "dest_network": "192.168.0.0",
+          "next_hop": "192.168.1.1"
+        }
+      ],
+      "ospf": {
+        "process_id": 1,
+        "router_id": "2.2.2.2",
+        "area_id": "0",
+        "networks": [
+          {
+            "area": "0",
+            "address": "172.16.0.0",
+            "mask": "0.0.255.255"
+          },
+          {
+            "area": "0",
+            "address": "100.1.1.0",
+            "mask": "0.0.0.3"
+          }
+        ]
+      }
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 3000,
+          "description": "外网访问控制",
+          "rules": [
+            {
+              "action": "permit",
+              "protocol": "tcp",
+              "source": "192.168.0.0",
+              "dest_port": "80",
+              "source_wildcard": "0.0.255.255"
+            },
+            {
+              "action": "permit",
+              "protocol": "tcp",
+              "source": "192.168.0.0",
+              "dest_port": "443",
+              "source_wildcard": "0.0.255.255"
+            },
+            {
+              "action": "permit",
+              "protocol": "udp",
+              "source": "192.168.0.0",
+              "dest_port": "53",
+              "source_wildcard": "0.0.255.255"
+            },
+            {
+              "action": "deny",
+              "protocol": "ip",
+              "source": "any"
+            }
+          ]
+        }
+      ],
+      "dhcp_snooping": {
+        "enable": false
+      },
+      "anti_attack": {
+        "enable": true,
+        "type": "all"
+      }
+    },
+    "interface": {
+      "rate_limits": [
+        {
+          "interface": "GigabitEthernet0/0/0",
+          "cir_out": 100000
+        }
+      ]
+    }
+  }
+}

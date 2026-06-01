@@ -1,0 +1,89 @@
+{
+  "scene": "core-switch",
+  "name": "园区网核心交换机",
+  "desc": "中小型企业三层架构核心层，含VLAN划分、STP主根、OSPF、链路聚合、管理安全",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "CORE-01",
+      "password": { "value": "C0r3@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{"ip": "ntp1.aliyun.com"}, {"ip": "ntp2.aliyun.com"}] },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read", "community_write": "netcmd-write" }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 1, "name": "Management" },
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "Finance" },
+        { "id": 30, "name": "Guest" },
+        { "id": 100, "name": "Server" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 1, "ip_address": "192.168.1.1", "mask": "255.255.255.0" },
+        { "vlan_id": 10, "ip_address": "192.168.10.1", "mask": "255.255.255.0" },
+        { "vlan_id": 20, "ip_address": "192.168.20.1", "mask": "255.255.255.0" },
+        { "vlan_id": 30, "ip_address": "192.168.30.1", "mask": "255.255.255.0" },
+        { "vlan_id": 100, "ip_address": "192.168.100.1", "mask": "255.255.255.0" }
+      ]
+    },
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "1.1.1.1",
+        "area_id": "0",
+        "networks": [
+          { "address": "192.168.1.0", "mask": "0.0.0.255" },
+          { "address": "192.168.10.0", "mask": "0.0.0.255" },
+          { "address": "192.168.20.0", "mask": "0.0.0.255" },
+          { "address": "192.168.100.0", "mask": "0.0.0.255" }
+        ]
+      },
+      "static_routes": [
+        { "dest_network": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "192.168.1.254" }
+      ]
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 2000,
+          "description": "管理访问控制",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "192.168.1.0", "source_wildcard": "0.0.0.255", "destination": "any", "dest_port": "22" },
+            { "action": "deny", "protocol": "tcp", "source": "any", "dest_port": "22" }
+          ]
+        }
+      ],
+      "dhcp_snooping": {
+        "enable": true,
+        "vlan": 1
+      },
+      "anti_attack": {
+        "enable": true,
+        "type": "all"
+      }
+    },
+    "interface": {
+      "eth_trunks": [
+        {
+          "trunk_id": 1,
+          "description": "To-Agg-01",
+          "mode": "lacp-static",
+          "member_ports": ["GigabitEthernet0/0/1", "GigabitEthernet0/0/2"]
+        },
+        {
+          "trunk_id": 2,
+          "description": "To-Agg-02",
+          "mode": "lacp-static",
+          "member_ports": ["GigabitEthernet0/0/3", "GigabitEthernet0/0/4"]
+        }
+      ],
+      "lldp": { "enable": true, "mode": "both", "interval": 30 },
+      "loop_detect": { "enable": true, "interval": 10, "action": "block" }
+    }
+  }
+}

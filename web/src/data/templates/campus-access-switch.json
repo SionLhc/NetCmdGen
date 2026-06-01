@@ -1,0 +1,142 @@
+{
+  "scene": "access-switch",
+  "name": "园区网接入交换机",
+  "desc": "终端接入层，含VLAN划分、端口安全、DHCP Snooping、风暴抑制、上行Trunk",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "ACC-01",
+      "password": {
+        "value": "Acc3$$@2026",
+        "encrypted": false
+      },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": {
+        "username": "netadmin",
+        "password": "N3t@dm1n",
+        "level": 15
+      },
+      "enable_ntp": true,
+      "ntp": {
+        "servers": [
+          {
+            "ip": "192.168.1.1"
+          }
+        ]
+      },
+      "enable_snmp": true,
+      "snmp": {
+        "version": "v2c",
+        "community_read": "netcmd-read"
+      }
+    },
+    "vlan": {
+      "vlans": [
+        {
+          "id": 10,
+          "name": "Office"
+        },
+        {
+          "id": 20,
+          "name": "Finance"
+        },
+        {
+          "id": 30,
+          "name": "Guest"
+        }
+      ],
+      "interfaces": [
+        {
+          "interface": "GigabitEthernet0/0/1",
+          "type": "trunk",
+          "vlan_id": 1,
+          "trunk_vlans": [
+            10,
+            20,
+            30
+          ]
+        },
+        {
+          "interface": "GigabitEthernet0/0/2",
+          "type": "access",
+          "vlan_id": 10
+        },
+        {
+          "interface": "GigabitEthernet0/0/3",
+          "type": "access",
+          "vlan_id": 10
+        },
+        {
+          "interface": "GigabitEthernet0/0/4",
+          "type": "access",
+          "vlan_id": 20
+        },
+        {
+          "interface": "GigabitEthernet0/0/5",
+          "type": "access",
+          "vlan_id": 30
+        }
+      ]
+    },
+    "security": {
+      "port_security": [
+        {
+          "interface": "GigabitEthernet0/0/2",
+          "max_mac": 2,
+          "violation": "shutdown",
+          "sticky": true
+        },
+        {
+          "interface": "GigabitEthernet0/0/3",
+          "max_mac": 1,
+          "violation": "protect",
+          "sticky": true
+        }
+      ],
+      "dhcp_snooping": {
+        "enable": true,
+        "vlan": 10,
+        "trusted_ports": [
+          "GigabitEthernet0/0/1"
+        ]
+      },
+      "storm_controls": [
+        {
+          "interface": "GigabitEthernet0/0/1",
+          "broadcast": 500,
+          "multicast": 500,
+          "action": "block"
+        }
+      ],
+      "arp_inspection": {
+        "vlans": [
+          10,
+          20,
+          30
+        ],
+        "trusted_ports": [
+          "GigabitEthernet0/0/1"
+        ]
+      }
+    },
+    "interface": {
+      "lldp": {
+        "enable": true
+      },
+      "loop_detect": {
+        "enable": true,
+        "interval": 5,
+        "action": "block"
+      }
+    },
+    "service": {
+      "dhcp_snooping": {
+        "enable": true,
+        "trusted_ports": [
+          "GigabitEthernet0/0/1"
+        ]
+      }
+    }
+  }
+}

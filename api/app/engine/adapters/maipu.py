@@ -3,13 +3,22 @@
 结构与锐捷几乎一致：
 - MaipuBasicGenerator.generate_basic_all(dict)  ← basic 统一入口
 - MaipuVLANGenerator.generate_vlans / generate_interface / generate_vlanif  ← vlan 细粒度
+- MaipuRoutingGenerator  ← 静态路由 / OSPF / BGP
+- MaipuSecurityGenerator  ← ACL / 端口安全 / 流量过滤
+- MaipuInterfaceGenerator  ← Eth-Trunk / LLDP / PoE / 环路检测
 """
 from __future__ import annotations
 
 from typing import Any, Dict, List
 
 from app.engine.base import FeatureNotSupported
-from app.engine.vendors.maipu import MaipuBasicGenerator, MaipuVLANGenerator
+from app.engine.vendors.maipu import (
+    MaipuBasicGenerator,
+    MaipuVLANGenerator,
+    MaipuRoutingGenerator,
+    MaipuSecurityGenerator,
+    MaipuInterfaceGenerator,
+)
 
 
 class MaipuAdapter:
@@ -49,18 +58,152 @@ class MaipuAdapter:
 
         return "\n".join(out)
 
-    # ── routing / security / interface / service (TODO) ─────
+    # ── routing ────────────────────────────────────────────
     def _gen_routing(self, params: Dict[str, Any]) -> str:
-        return "! routing 模板待接入\n"
+        """生成路由配置（静态路由 / OSPF / BGP）。"""
+        out: List[str] = ['!', '# 路由配置', '!']
 
+        if 'static_routes' in params:
+            out.append(MaipuRoutingGenerator.generate_static_routes(
+                params['static_routes']
+            ))
+
+        if 'ospf' in params:
+            ospf = params['ospf']
+            out.append(MaipuRoutingGenerator.generate_ospf(
+                ospf.get('process_id', 1),
+                ospf['router_id'],
+                ospf['networks']
+            ))
+
+        if 'bgp' in params:
+            bgp = params['bgp']
+            out.append(MaipuRoutingGenerator.generate_bgp(
+                bgp['as_number'],
+                bgp['router_id'],
+                bgp.get('peers', []),
+                bgp.get('networks', [])
+            ))
+
+        return '\n'.join(out)
+
+    # ── security ───────────────────────────────────────────
     def _gen_security(self, params: Dict[str, Any]) -> str:
-        return "! security 模板待接入\n"
+        """生成安全配置（ACL / 端口安全 / 流量过滤）。"""
+        out: List[str] = ['!', '# 安全配置', '!']
 
+        if 'acls' in params:
+            for acl in params['acls']:
+                out.append(MaipuSecurityGenerator.generate_acl(
+                    acl['number'],
+                    acl['rules'],
+                    acl.get('description')
+                ))
+
+        if 'port_security' in params:
+            for ps in params['port_security']:
+                out.append(MaipuSecurityGenerator.generate_port_security(
+                    ps['interface'],
+                    ps.get('max_mac', 1),
+                    ps.get('violation', 'shutdown'),
+                    ps.get('sticky', False)
+                ))
+
+        if 'traffic_filters' in params:
+            for tf in params['traffic_filters']:
+                out.append(MaipuSecurityGenerator.generate_traffic_filter(
+                    tf['interface'],
+                    tf['acl_number'],
+                    tf.get('direction', 'in')
+                ))
+
+        return '\n'.join(out)
+
+    # ── interface ──────────────────────────────────────────
     def _gen_interface(self, params: Dict[str, Any]) -> str:
-        return "! interface 模板待接入\n"
+        """生成接口配置（Eth-Trunk 聚合 / LLDP / PoE / 环路检测 / 限速）。"""
+        out: List[str] = ['!', '# 接口配置', '!']
 
+        if 'eth_trunks' in params:
+            for trunk in params['eth_trunks']:
+                out.append(MaipuInterfaceGenerator.generate_eth_trunk(
+                    trunk['trunk_id'],
+                    trunk.get('mode', 'lacp'),
+                    trunk.get('members'),
+                    trunk.get('description')
+                ))
+
+        if 'lldp' in params:
+            lldp = params['lldp']
+            out.append(MaipuInterfaceGenerator.generate_lldp(
+                lldp.get('enable', True),
+                lldp.get('mode', 'tx_rx'),
+                lldp.get('interval', 30),
+                lldp.get('holdtime', 120)
+            ))
+
+        if 'poe_interfaces' in params:
+            for poe in params['poe_interfaces']:
+                out.append(MaipuInterfaceGenerator.generate_poe(
+                    poe.get('interface'),
+                    poe.get('enable', True),
+                    poe.get('priority', 'low'),
+                    poe.get('power')
+                ))
+
+        if 'loop_detect' in params:
+            ld = params['loop_detect']
+            out.append(MaipuInterfaceGenerator.generate_loop_detect(
+                ld.get('enable', True),
+                ld.get('interval', 5),
+                ld.get('action', 'shutdown')
+            ))
+
+        if 'rate_limits' in params:
+            for rl in params['rate_limits']:
+                out.append(MaipuInterfaceGenerator.generate_rate_limit(
+                    rl['interface'],
+                    rl.get('rate_in'),
+                    rl.get('rate_out')
+                ))
+
+        return '\n'.join(out)
+
+    # ── service ────────────────────────────────────────────
     def _gen_service(self, params: Dict[str, Any]) -> str:
-        return "! service 模板待接入\n"
+        """生成服务配置（DHCP Server / DHCP Relay / DHCP Snooping）。"""
+        out: List[str] = ['!', '# 服务配置', '!']
+
+        if 'dhcp_server' in params:
+            dhcp = params['dhcp_server']
+            out.append('service dhcp')
+            if 'pools' in dhcp:
+                for pool in dhcp['pools']:
+                    out.append(f"ip dhcp pool {pool['name']}")
+                    out.append(f" network {pool['network']} {pool['mask']}")
+                    if 'default_router' in pool:
+                        out.append(f" default-router {pool['default_router']}")
+                    if 'dns_servers' in pool:
+                        out.append(f" dns-server {' '.join(pool['dns_servers'])}")
+                    out.append('!')
+
+        if 'dhcp_relay' in params:
+            relay = params['dhcp_relay']
+            for iface in relay.get('interfaces', []):
+                out.append(f"interface {iface['name']}")
+                out.append(f" ip helper-address {iface['server_ip']}")
+                out.append('!')
+
+        if 'dhcp_snooping' in params:
+            ds = params['dhcp_snooping']
+            if ds.get('enable', True):
+                out.append('ip dhcp snooping')
+                for port in ds.get('trusted_ports', []):
+                    out.append(f"interface {port}")
+                    out.append(' ip dhcp snooping trust')
+                    out.append('!')
+
+        return '\n'.join(out)
 
     # ── 统一入口 ─────────────────────────────────────────────
     _GEN = {
