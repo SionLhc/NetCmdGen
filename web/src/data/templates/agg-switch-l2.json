@@ -1,0 +1,28 @@
+{
+  "scene": "agg-switch",
+  "name": "二层汇聚交换机",
+  "desc": "纯二层汇聚交换机，含VLAN透传、Eth-Trunk上行、STP根保护",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "L2-AGG-01",
+      "password": { "value": "Agg@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "Finance" },
+        { "id": 30, "name": "Guest" },
+        { "id": 99, "name": "Mgmt" }
+      ]
+    },
+    "interface": {
+      "eth_trunks": [
+        { "trunk_id": 1, "mode": "lacp", "members": ["GigabitEthernet0/0/47","GigabitEthernet0/0/48"], "description": "To-Core" }
+      ]
+    }
+  }
+}

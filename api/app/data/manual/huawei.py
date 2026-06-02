@@ -259,12 +259,14 @@ HUAWEI_COMMANDS = {
             "查看VRRP详细": {"command": "display vrrp detail", "description": "查看VRRP详细信息", "example": "<Huawei> display vrrp detail"}
         },
         "堆叠配置": {
-            "启用堆叠": {"command": "stack enable", "description": "启用堆叠功能", "example": "[Huawei] stack enable"},
-            "配置堆叠域": {"command": "stack domain <domain-id>", "description": "配置堆叠域ID", "example": "[Huawei] stack domain 10"},
-            "配置堆叠ID": {"command": "stack slot <slot-id> priority <priority>", "description": "设置堆叠优先级", "example": "[Huawei] stack slot 0 priority 150"},
-            "配置堆叠端口": {"command": "interface stack-port <port-id>\nport member-group interface <interface>", "description": "配置堆叠物理端口", "example": "[Huawei] interface stack-port 0/1\n[Huawei-Stack-Port0/1] port member-group interface GigabitEthernet0/0/1"},
-            "查看堆叠状态": {"command": "display stack", "description": "查看堆叠状态", "example": "<Huawei> display stack"},
-            "查看堆叠拓扑": {"command": "display stack topology", "description": "查看堆叠拓扑", "example": "<Huawei> display stack topology"}
+            "启用堆叠": {"command": "stack enable", "description": "启用堆叠功能（V5使用stack，V8部分型号改为CSS）", "example": "[Huawei] stack enable", "versions": ["v5"]},
+            "配置堆叠域": {"command": "stack domain <domain-id>", "description": "配置堆叠域ID", "example": "[Huawei] stack domain 10", "versions": ["v5"]},
+            "配置堆叠ID": {"command": "stack slot <slot-id> priority <priority>", "description": "设置堆叠优先级", "example": "[Huawei] stack slot 0 priority 150", "versions": ["v5"]},
+            "配置堆叠端口": {"command": "interface stack-port <port-id>\nport member-group interface <interface>", "description": "配置堆叠物理端口", "example": "[Huawei] interface stack-port 0/1\n[Huawei-Stack-Port0/1] port member-group interface GigabitEthernet0/0/1", "versions": ["v5"]},
+            "查看堆叠状态": {"command": "display stack", "description": "查看堆叠状态", "example": "<Huawei> display stack", "versions": ["v5"]},
+            "查看堆叠拓扑": {"command": "display stack topology", "description": "查看堆叠拓扑", "example": "<Huawei> display stack topology", "versions": ["v5"]},
+            "配置CSS集群": {"command": "css enable\nset css mode <lpu|css-card>\nset css id <1|2>\nset css priority <priority>", "description": "V8/V300 CSS2集群配置（V5不支持）", "example": "[Huawei] css enable\n[Huawei] set css mode lpu\n[Huawei] set css id 1\n[Huawei] set css priority 100", "versions": ["v8", "v300"]},
+            "查看CSS状态": {"command": "display css status", "description": "查看CSS集群状态", "example": "<Huawei> display css status", "versions": ["v8", "v300"]}
         },
         "BFD配置": {
             "启用BFD": {"command": "bfd", "description": "全局启用BFD", "example": "[Huawei] bfd"},

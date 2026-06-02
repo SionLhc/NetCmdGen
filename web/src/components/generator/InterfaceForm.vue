@@ -13,7 +13,7 @@
         <el-col :span="10"><el-input v-model="trunkMode" placeholder="成员接口(逗号分隔)" @change="updateTrunkMembers" /></el-col>
       </el-row>
     </div>
-    <el-button size="small" plain @click="ethTrunks.push({trunk_id:1,description:'',members:[]});emitUpdate()" style="width:100%">+ 添加聚合组</el-button>
+    <el-button size="small" type="primary" plain @click="ethTrunks.push({trunk_id:1,description:'',members:[]});emitUpdate()" style="width:100%">+ 添加聚合组</el-button>
 
     <!-- LLDP -->
     <el-divider content-position="left">LLDP</el-divider>
@@ -37,7 +37,7 @@
         <el-col :span="2"><el-button text type="danger" @click="poeInterfaces.splice(idx,1);emitUpdate()">✕</el-button></el-col>
       </el-row>
     </div>
-    <el-button size="small" plain @click="poeInterfaces.push({interface:'GigabitEthernet0/0/1',enable:true,priority:'low',power:15400});emitUpdate()" style="width:100%">+ 添加 PoE 接口</el-button>
+    <el-button size="small" type="primary" plain @click="poeInterfaces.push({interface:'GigabitEthernet0/0/1',enable:true,priority:'low',power:15400});emitUpdate()" style="width:100%">+ 添加 PoE 接口</el-button>
 
     <!-- 环路检测 -->
     <el-divider content-position="left">环路检测</el-divider>

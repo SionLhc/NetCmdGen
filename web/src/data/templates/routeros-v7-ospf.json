@@ -1,0 +1,53 @@
+{
+  "scene": "router",
+  "name": "RouterOS V7 路由器+OSPF",
+  "desc": "MikroTik RouterOS V7 路由器，含OSPF动态路由、NAT、防火墙、WireGuard",
+  "vendor": "routeros",
+  "config": {
+    "description": "RouterOS V7 + OSPF 路由器",
+    "basic": {
+      "hostname": "ROS-V7-Core",
+      "user": { "username": "admin", "password": "Admin@2026" },
+      "enable_ssh": true,
+      "ssh": { "port": 22 },
+      "dns_servers": "8.8.8.8"
+    },
+    "interface": {
+      "interfaces": [
+        { "name": "ether1", "ip": "10.0.0.1", "mask": "24", "description": "Core-Uplink" },
+        { "name": "ether2", "ip": "192.168.1.1", "mask": "24", "description": "LAN" }
+      ]
+    },
+    "vlan": {
+      "bridge": "bridge1",
+      "vlans": [
+        { "id": 10, "trunk": "ether2" },
+        { "id": 20, "trunk": "ether2" }
+      ],
+      "bridge_ports": [
+        { "interface": "ether3" },
+        { "interface": "ether4" }
+      ]
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "prefix": "0", "gateway": "10.0.0.254", "comment": "默认路由" }
+      ],
+      "ospf": {
+        "router_id": "1.1.1.1",
+        "networks": [
+          { "address": "10.0.0.0/24", "area": "0.0.0.0" },
+          { "address": "192.168.1.0/24", "area": "0.0.0.0" }
+        ]
+      }
+    },
+    "security": {
+      "nat": [{ "wan_interface": "ether1" }],
+      "filter_rules": [
+        { "chain": "input", "action": "accept", "protocol": "tcp", "port": "22" },
+        { "chain": "input", "action": "drop", "protocol": "tcp", "port": "8291" }
+      ],
+      "wireguard": true
+    }
+  }
+}

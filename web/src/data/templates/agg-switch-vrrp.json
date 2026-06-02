@@ -1,0 +1,68 @@
+{
+  "scene": "agg-switch",
+  "name": "汇聚交换机 VRRP+MSTP",
+  "desc": "园区汇聚层双机热备，含VRRP主备、MSTP多实例、上行Eth-Trunk链路聚合、VLANIF网关",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "AGG-01",
+      "password": { "value": "Agg@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "192.168.1.1" }] },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "Finance" },
+        { "id": 30, "name": "Guest" },
+        { "id": 50, "name": "Mgmt" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 10, "ip_address": "192.168.10.252", "mask": "255.255.255.0" },
+        { "vlan_id": 20, "ip_address": "192.168.20.252", "mask": "255.255.255.0" },
+        { "vlan_id": 30, "ip_address": "192.168.30.252", "mask": "255.255.255.0" },
+        { "vlan_id": 50, "ip_address": "192.168.50.1", "mask": "255.255.255.0" }
+      ]
+    },
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "2.2.2.2",
+        "area_id": "0",
+        "networks": [
+          { "address": "192.168.10.0", "mask": "0.0.0.255" },
+          { "address": "192.168.20.0", "mask": "0.0.0.255" },
+          { "address": "192.168.50.0", "mask": "0.0.0.255" }
+        ]
+      }
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 3000,
+          "description": "management-access",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "192.168.50.0", "source_wildcard": "0.0.0.255", "destination": "any", "dest_port": "22" },
+            { "action": "deny", "protocol": "tcp", "source": "any", "dest_port": "22" }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "eth_trunks": [
+        {
+          "trunk_id": 1,
+          "description": "To-Core",
+          "mode": "lacp-static",
+          "member_ports": ["GigabitEthernet0/0/47", "GigabitEthernet0/0/48"]
+        }
+      ],
+      "lldp": { "enable": true, "mode": "both", "interval": 30 }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "scene": "access-switch",
+  "name": "接入交换机 Voice VLAN",
+  "desc": "含Voice VLAN、端口安全MAC绑定、PoE供电描述、风暴抑制、DHCP Snooping",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "ACC-F1-01",
+      "password": { "value": "Acc3$$@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "192.168.1.1" }] }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Data" },
+        { "id": 20, "name": "Voice" },
+        { "id": 99, "name": "Mgmt" }
+      ],
+      "interfaces": [
+        { "interface": "GigabitEthernet0/0/1", "type": "access", "vlan_id": 10 },
+        { "interface": "GigabitEthernet0/0/2", "type": "access", "vlan_id": 10 },
+        { "interface": "GigabitEthernet0/0/3", "type": "access", "vlan_id": 20 },
+        { "interface": "GigabitEthernet0/0/24", "type": "trunk", "vlan_id": 1, "trunk_vlans": [10, 20, 99] }
+      ]
+    },
+    "security": {
+      "port_security": [
+        { "interface": "GigabitEthernet0/0/1", "max_mac": 1, "violation": "shutdown", "sticky": true },
+        { "interface": "GigabitEthernet0/0/3", "max_mac": 1, "violation": "restrict", "sticky": true }
+      ],
+      "dhcp_snooping": { "enable": true, "vlan": 10, "trusted_ports": ["GigabitEthernet0/0/24"] },
+      "storm_controls": [
+        { "interface": "GigabitEthernet0/0/24", "broadcast": 300, "multicast": 300, "action": "block" }
+      ],
+      "arp_inspection": { "vlans": [10, 20], "trusted_ports": ["GigabitEthernet0/0/24"] }
+    },
+    "interface": {
+      "lldp": { "enable": true },
+      "loop_detect": { "enable": true, "interval": 5, "action": "block" }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "scene": "firewall",
+  "name": "锐捷防火墙",
+  "desc": "锐捷RG-WALL防火墙基础配置，含安全域、NAT、ACL",
+  "vendor": "ruijie",
+  "config": {
+    "basic": {
+      "hostname": "RG-FW-01",
+      "password": { "value": "Firewall@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "fwadmin", "password": "Fw@dm1n", "level": 15 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        { "number": 100, "type": "extended",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "192.168.0.0", "source_wildcard": "0.0.255.255", "destination": "any", "destination_port": "443" },
+            { "action": "permit", "protocol": "tcp", "source": "192.168.0.0", "source_wildcard": "0.0.255.255", "destination": "any", "destination_port": "80" },
+            { "action": "deny", "protocol": "ip", "source": "any" }
+          ]}
+      ]
+    }
+  }
+}

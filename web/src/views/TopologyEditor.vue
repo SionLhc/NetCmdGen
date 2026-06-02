@@ -4,19 +4,30 @@
     <div class="toolbar">
       <div class="toolbar-left">
         <span class="title">企业园区网拓扑编辑器</span>
+        <el-divider direction="vertical" />
+        <!-- 多拓扑管理 -->
+        <el-select v-model="currentTopoId" size="small" style="width:180px" @change="switchTopo" placeholder="选择拓扑">
+          <el-option v-for="t in topoList" :key="t.id" :label="t.name" :value="t.id"/>
+        </el-select>
+        <el-button size="small" @click="handleNewTopo">+ 新建</el-button>
+        <el-button size="small" @click="handleRenameTopo" :disabled="!currentTopoId">重命名</el-button>
+        <el-button size="small" @click="handleDeleteTopo" :disabled="topoList.length<=1">删除</el-button>
+        <el-divider direction="vertical" />
         <el-button size="small" @click="handleAddGroup">+ 添加分组</el-button>
         <el-button size="small" @click="handleAutoLayout">自动布局</el-button>
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleClear">清空</el-button>
-        <el-button size="small" @click="handleSave">保存拓扑</el-button>
-        <el-button size="small" @click="handleLoad">加载拓扑</el-button>
+        <el-button size="small" @click="handleDeleteSelected" :disabled="!topologyStore.selectedNode && !topologyStore.selectedEdge">删除选中</el-button>
         <el-divider direction="vertical" />
-        <el-button type="success" size="small" @click="handleExportToWorkbench">导出到命令工作台</el-button>
+        <el-button size="small" @click="handleUndo" title="Ctrl+Z">↩ 撤销</el-button>
+        <el-button size="small" @click="handleRedo" title="Ctrl+Y">↪ 重做</el-button>
+        <el-divider direction="vertical" />
+        <el-button size="small" @click="handleSave">保存</el-button>
+        <el-button size="small" @click="handleDownload">导出 JSON</el-button>
+        <el-button size="small" @click="handleExportPng">导出 PNG</el-button>
       </div>
       <div class="toolbar-right">
-        <el-button type="primary" size="small" @click="handleGenerateAll" :loading="topologyStore.generating">
-          一键生成全部配置
-        </el-button>
+        <el-button type="success" size="small" @click="handleExportToWorkbench">导出到命令工作台</el-button>
       </div>
     </div>
 
@@ -24,11 +35,8 @@
       <!-- 左侧设备库 -->
       <DevicePalette />
 
-      <!-- 中间：画布 + 配置输出 -->
-      <div class="center-area">
-        <div class="canvas-wrapper" ref="canvasRef"></div>
-        <ConfigOutput />
-      </div>
+      <!-- 中间：画布 -->
+      <div class="canvas-wrapper" ref="canvasRef"></div>
 
       <!-- 右侧属性面板 -->
       <PropertyPanel />
@@ -175,15 +183,77 @@ import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { Graph } from '@antv/x6'
 import { ElMessage } from 'element-plus'
 import { useTopologyStore } from '@/stores/topology'
-import { generateCampusConfig } from '@/api'
-import { analyzeTopology } from '@/utils/topologyAnalyzer'
-import { buildConfigParams, formatConfigOutput } from '@/utils/configGenerator'
 import DevicePalette from '@/components/topology/DevicePalette.vue'
 import PropertyPanel from '@/components/topology/PropertyPanel.vue'
-import ConfigOutput from '@/components/topology/ConfigOutput.vue'
 
 const topologyStore = useTopologyStore()
 const canvasRef = ref<HTMLDivElement>()
+
+// ─── 多拓扑管理 ──────────────────────────────────────
+const TOPO_LIST_KEY = 'netcmdgen_topo_list'
+const TOPO_DATA_PREFIX = 'netcmdgen_topo_'
+
+interface TopoItem { id: string; name: string }
+const topoList = ref<TopoItem[]>(loadTopoList())
+const currentTopoId = ref(topoList.value[0]?.id || '')
+
+function loadTopoList(): TopoItem[] {
+  try { const r = localStorage.getItem(TOPO_LIST_KEY); return r ? JSON.parse(r) : [{id:'default',name:'默认拓扑'}] }
+  catch { return [{id:'default',name:'默认拓扑'}] }
+}
+function saveTopoList() { localStorage.setItem(TOPO_LIST_KEY, JSON.stringify(topoList.value)) }
+
+function handleNewTopo() {
+  const name = prompt('新建拓扑名称:', `拓扑方案${topoList.value.length+1}`)
+  if (!name) return
+  const item: TopoItem = { id: `topo_${Date.now()}`, name }
+  topoList.value.push(item); saveTopoList()
+  currentTopoId.value = item.id
+  graph?.clearCells(); handleSave()
+  ElMessage.success(`已创建: ${name}`)
+}
+
+function switchTopo(id: string) {
+  if (!graph) return
+  // 保存当前拓扑
+  const oldData = graph.toJSON()
+  if (Object.keys(oldData.cells || {}).length > 0) {
+    localStorage.setItem(TOPO_DATA_PREFIX + currentTopoId.value, JSON.stringify(oldData))
+  }
+  // 加载目标拓扑
+  currentTopoId.value = id
+  loadCurrentTopo()
+}
+
+function loadCurrentTopo() {
+  if (!graph) return
+  try {
+    const raw = localStorage.getItem(TOPO_DATA_PREFIX + currentTopoId.value)
+    if (raw) { graph.fromJSON(JSON.parse(raw)); return }
+  } catch {}
+  graph.clearCells()
+}
+
+function handleRenameTopo() {
+  const item = topoList.value.find(t => t.id === currentTopoId.value)
+  if (!item) return
+  const name = prompt('新名称:', item.name)
+  if (!name) return
+  item.name = name; saveTopoList()
+  ElMessage.success('已重命名')
+}
+
+function handleDeleteTopo() {
+  if (topoList.value.length <= 1) { ElMessage.warning('至少保留一个拓扑'); return }
+  const item = topoList.value.find(t => t.id === currentTopoId.value)
+  if (!item) return
+  if (!confirm(`确定删除"${item.name}"？此操作不可撤销。`)) return
+  topoList.value = topoList.value.filter(t => t.id !== currentTopoId.value); saveTopoList()
+  localStorage.removeItem(TOPO_DATA_PREFIX + currentTopoId.value)
+  currentTopoId.value = topoList.value[0].id
+  loadCurrentTopo()
+  ElMessage.success('已删除')
+}
 
 let graph: Graph | null = null
 
@@ -376,6 +446,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleKeyDelete)
   graph?.dispose()
 })
 
@@ -505,7 +576,23 @@ function initGraph() {
         },
       },
     },
+    history: {
+      enabled: true,
+      // 排除临时/导航节点变化
+      beforeAddCommand(event, args) { return true },
+    },
   })
+
+  // ─── 快捷键：Ctrl+Z 撤销 / Ctrl+Y 重做 ──────────────
+  const handleKeyHistory = (e: KeyboardEvent) => {
+    if (!graph || (e.target as HTMLElement)?.tagName === 'INPUT') return
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault(); graph.undo()
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+      e.preventDefault(); graph.redo()
+    }
+  }
+  document.addEventListener('keydown', handleKeyHistory)
 
   // 控制连接桩高亮的函数
   const showPorts = (show: boolean) => {
@@ -550,6 +637,9 @@ function initGraph() {
   graph.on('edge:dblclick', ({ edge }) => {
     openEdgeLabelEditor(edge)
   })
+
+  // 加载当前选中的拓扑
+  loadCurrentTopo()
 
   // 连线创建完成后自动提示编辑标签
   graph.on('edge:connected', ({ edge }) => {
@@ -958,14 +1048,16 @@ function handleExportToWorkbench() {
         const vlanSet = new Set<number>()
 
         for (const edge of allEdges) {
-            const srcId = edge.getSourceCellId?.() || edge.getSource()?.cell
-            const tgtId = edge.getTargetCellId?.() || edge.getTarget()?.cell
+            const srcId = (edge.getSourceCellId?.() || (edge.getSource() as any)?.cell) as string
+            const tgtId = (edge.getTargetCellId?.() || (edge.getTarget() as any)?.cell) as string
             if (srcId !== node.id && tgtId !== node.id) continue
 
             const ed = edge.getData?.() || {}
             const isSource = srcId === node.id
             const remoteId = isSource ? tgtId : srcId
-            const remoteNode = graph.getCellById(remoteId as string)
+            // graph 已在上方校验非空，此处安全
+            const g = graph!
+            const remoteNode = g.getCellById(remoteId)
             const remoteLabel = remoteNode?.getAttrByPath?.('label/text') as string
                 || remoteNode?.getData?.()?.hostname || (remoteId as string || '未知')
 
@@ -995,11 +1087,25 @@ function handleExportToWorkbench() {
             vlans: [...vlanSet].sort((a, b) => a - b).join(',') || '',
             description: data.description || data.role || '',
             ports,
+            x: node.getPosition().x,
+            y: node.getPosition().y,
         }
     })
 
     topologyStore.exportedDevices = devices
-    ElMessage.success(`已导出 ${devices.length} 台设备 (含 ${allEdges.length} 条连线信息) 到命令工作台，请切换到「拓扑项目」Tab 查看`)
+    // 导出连线：用设备的 hostname 作为 source/target，保证与项目画布一致
+    const hostnames: Record<string, string> = {}
+    for (const d of devices) hostnames[d.id] = d.hostname
+    topologyStore.exportedEdges = allEdges.map(e => ({
+      source: hostnames[e.getSourceCellId()] || e.getSourceCellId(),
+      target: hostnames[e.getTargetCellId()] || e.getTargetCellId(),
+      linkType: (e.getData() as any)?.linkType || 'trunk',
+      vlanId: (e.getData() as any)?.vlanId,
+      bandwidth: (e.getData() as any)?.bandwidth,
+      sourcePort: (e.getData() as any)?.sourcePort,
+      targetPort: (e.getData() as any)?.targetPort,
+    }))
+    ElMessage.success(`已导出 ${devices.length} 台设备 + ${topologyStore.exportedEdges.length} 条连线`)
 }
 
 /** 自动布局：核心-汇聚-接入三层从上到下排列 */
@@ -1097,6 +1203,7 @@ onMounted(() => {
   if (!canvasRef.value) return
   canvasRef.value.addEventListener('dragover', (e) => e.preventDefault())
   canvasRef.value.addEventListener('drop', onDrop)
+  document.addEventListener('keydown', handleKeyDelete)
 })
 
 function onDrop(e: DragEvent) {
@@ -1141,141 +1248,74 @@ function onDrop(e: DragEvent) {
   })
 }
 
+function handleDeleteSelected() {
+  if (!graph) return
+  if (topologyStore.selectedNode) {
+    graph.removeCell(topologyStore.selectedNode.id)
+    topologyStore.selectedNode = null
+    ElMessage.success('已删除设备')
+  } else if (topologyStore.selectedEdge) {
+    graph.removeCell(topologyStore.selectedEdge.id)
+    topologyStore.selectedEdge = null
+    ElMessage.success('已删除连线')
+  }
+}
+
+function handleKeyDelete(e: KeyboardEvent) {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // 忽略输入框中的删除操作
+    const tag = (e.target as HTMLElement)?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+    e.preventDefault()
+    handleDeleteSelected()
+  }
+}
+
 function handleClear() {
   graph?.clearCells()
   topologyStore.selectedNode = null
   topologyStore.selectedEdge = null
-  topologyStore.configOutput = ''
   ElMessage.success('画布已清空')
 }
 
 function handleSave() {
   if (!graph) return
   const json = graph.toJSON()
+  localStorage.setItem(TOPO_DATA_PREFIX + currentTopoId.value, JSON.stringify(json))
+  ElMessage.success(`"${topoList.value.find(t=>t.id===currentTopoId.value)?.name}" 已保存`)
+}
+
+function handleDownload() {
+  if (!graph) return
+  const json = graph.toJSON()
   const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url
-  a.download = `topology_${Date.now()}.json`
-  a.click()
+  a.href = url; a.download = `topology_${Date.now()}.json`; a.click()
   URL.revokeObjectURL(url)
-  ElMessage.success('拓扑已保存')
+  ElMessage.success('JSON 文件已下载')
 }
 
-function handleLoad() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.json'
-  input.onchange = (e: any) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const json = JSON.parse(ev.target?.result as string)
-        graph?.fromJSON(json)
-        ElMessage.success('拓扑已加载')
-      } catch {
-        ElMessage.error('加载失败，文件格式错误')
-      }
-    }
-    reader.readAsText(file)
-  }
-  input.click()
-}
+function handleUndo() { graph?.undo() }
+function handleRedo() { graph?.redo() }
 
-async function handleGenerateAll() {
+/** 导出拓扑图为 PNG 图片 */
+async function handleExportPng() {
   if (!graph) return
-  const nodes = graph.getNodes()
-  const edges = graph.getEdges()
-  
-  if (nodes.length === 0) {
-    ElMessage.warning('画布中没有设备')
-    return
-  }
-
-  topologyStore.generating = true
-  
   try {
-    // 步骤1：拓扑分析
-    const topologyNodes = nodes.map(node => ({
-      id: node.id,
-      type: node.getData()?.type || 'switch',
-      role: node.getData()?.role || 'access-switch',
-      vendor: node.getData()?.vendor || 'huawei',
-      hostname: node.getAttrByPath('text/text') || node.id,
-      mgmtSubnet: node.getData()?.mgmtSubnet || '192.168.1.0/24',
-    }))
-
-    const topologyEdges = edges.map(edge => ({
-      id: edge.id,
-      source: edge.getSourceCellId(),
-      target: edge.getTargetCellId(),
-      sourcePort: edge.getData()?.sourcePort || '',
-      targetPort: edge.getData()?.targetPort || '',
-      linkType: edge.getData()?.linkType || 'trunk',
-      vlanId: edge.getData()?.vlanId,
-      allowedVlans: edge.getData()?.allowedVlans,
-      bandwidth: edge.getData()?.bandwidth || '1G',
-    }))
-
-    // 找出核心交换机的管理网段
-    const coreNode = topologyNodes.find(n => n.role === 'core-switch')
-    const coreSubnet = coreNode?.mgmtSubnet || '192.168.1.0/24'
-    
-    const analysis = analyzeTopology(topologyNodes, topologyEdges, coreSubnet)
-    
-    // 步骤2：构建配置参数
-    const configParams = buildConfigParams(topologyNodes, topologyEdges, analysis)
-    
-    // 步骤3：调用后端生成配置
-    const outputs: Array<{ device: string; vendor: string; output: string }> = []
-    
-    for (const params of configParams) {
-      // 确定场景类型
-      let scene: 'campus_core' | 'campus_access' | 'campus_agg'
-      if (params.role === 'core-switch') {
-        scene = 'campus_core'
-      } else if (params.role === 'agg-switch') {
-        scene = 'campus_agg'
-      } else {
-        scene = 'campus_access'
-      }
-      
-      try {
-        const result = await generateCampusConfig({
-          vendor: params.vendor,
-          hostname: params.hostname,
-          mgmt_ip: params.mgmtIp,
-          vlans: params.vlans,
-          interfaces: params.interfaces,
-          routing: params.routing,
-          stp: params.stp,
-          scene,
-        })
-        
-        outputs.push({
-          device: params.hostname,
-          vendor: params.vendor,
-          output: result.output,
-        })
-      } catch (error: any) {
-        outputs.push({
-          device: params.hostname,
-          vendor: params.vendor,
-          output: `# 生成失败: ${error.response?.data?.detail || error.message}`,
-        })
-      }
-    }
-    
-    // 步骤4：格式化输出
-    topologyStore.configOutput = formatConfigOutput(outputs)
-    
-    ElMessage.success(`成功生成 ${outputs.length} 台设备的配置`)
-  } catch (error: any) {
-    ElMessage.error(`生成失败: ${error.message}`)
-  } finally {
-    topologyStore.generating = false
+    // X6 exportPNG 返回 base64 data URL
+    const dataUrl = await graph.exportPNG('png', {
+      padding: 20,
+      backgroundColor: '#ffffff',
+      ratio: 1,
+    })
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `topology_${Date.now()}.png`
+    a.click()
+    ElMessage.success('PNG 图片已导出')
+  } catch (e: any) {
+    ElMessage.error('导出失败: ' + (e.message || ''))
   }
 }
 </script>
@@ -1318,18 +1358,12 @@ async function handleGenerateAll() {
   overflow: hidden;
 }
 
-.center-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 .canvas-wrapper {
   flex: 1;
   background: #fff;
   min-height: 300px;
   position: relative;
+  overflow: hidden;
 }
 
 .canvas-wrapper :deep(.x6-minimap-container) {

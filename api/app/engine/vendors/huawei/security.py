@@ -2,49 +2,57 @@
 # -*- coding: utf-8 -*-
 """
 NetOps Toolkit - 安全配置模块（增强版）
+
+支持 VRP 版本区分：V5 用 acl number，V8/V300 用 acl。
 """
+
+from app.engine.vendors.huawei.version_config import VrpVersion, get_cmd
 
 
 class SecurityConfigGenerator:
     """安全配置生成器"""
-    
+
     @staticmethod
     def generate_acl_std(number: int,
                         rules: list,
-                        description: str = None) -> str:
-        """生成标准ACL配置"""
+                        description: str = None,
+                        version: VrpVersion = VrpVersion.V5) -> str:
+        """生成标准ACL配置（支持 VRP 版本区分）"""
         config_lines = []
-        config_lines.append(f"acl number {number}\n")
+        # 根据 VRP 版本生成不同的 ACL 前缀：V5=acl number, V8/V300=acl
+        acl_prefix = get_cmd(version, "acl_prefix", num=number)
+        config_lines.append(acl_prefix + "\n")
         if description:
             config_lines.append(f" description {description}\n")
-        
+
         for idx, rule in enumerate(rules):
             action = rule.get("action", "permit")
             source = rule.get("source")
             source_wildcard = rule.get("source_wildcard", "0.0.0.0")
-            # 自动生成 rule ID（5, 10, 15...），用户也可显式指定 id
             rule_id = rule.get("id", (idx + 1) * 5)
-            
+
             rule_str = f" rule {rule_id} {action} source"
             if source:
                 rule_str += f" {source} {source_wildcard}"
             else:
                 rule_str += " any"
             config_lines.append(rule_str + "\n")
-        
+
         config_lines.append("#\n")
         return "".join(config_lines)
-    
+
     @staticmethod
     def generate_acl_ext(number: int,
                         rules: list,
-                        description: str = None) -> str:
-        """生成扩展ACL配置"""
+                        description: str = None,
+                        version: VrpVersion = VrpVersion.V5) -> str:
+        """生成扩展ACL配置（支持 VRP 版本区分）"""
         config_lines = []
-        config_lines.append(f"acl number {number}\n")
+        acl_prefix = get_cmd(version, "acl_prefix", num=number)
+        config_lines.append(acl_prefix + "\n")
         if description:
             config_lines.append(f" description {description}\n")
-        
+
         for idx, rule in enumerate(rules):
             action = rule.get("action", "permit")
             protocol = rule.get("protocol", "ip")
@@ -53,9 +61,8 @@ class SecurityConfigGenerator:
             dest = rule.get("destination", "any")
             dst_wildcard = rule.get("destination_wildcard")
             dest_port = rule.get("dest_port")
-            # 自动生成 rule ID（5, 10, 15...）
             rule_id = rule.get("id", (idx + 1) * 5)
-            
+
             rule_str = f" rule {rule_id} {action} {protocol}"
             if source and source != "any":
                 rule_str += f" source {source}"
@@ -63,19 +70,19 @@ class SecurityConfigGenerator:
                     rule_str += f" {src_wildcard}"
             else:
                 rule_str += " source any"
-            
+
             if dest and dest != "any":
                 rule_str += f" destination {dest}"
                 if dst_wildcard:
                     rule_str += f" {dst_wildcard}"
             else:
                 rule_str += " destination any"
-            
+
             if dest_port and protocol in ["tcp", "udp"]:
                 rule_str += f" destination-port eq {dest_port}"
-            
+
             config_lines.append(rule_str + "\n")
-        
+
         config_lines.append("#\n")
         return "".join(config_lines)
     
@@ -388,23 +395,26 @@ class SecurityConfigGenerator:
         return "".join(config_lines)
     
     @staticmethod
-    def generate_security_all(config: dict) -> str:
-        """生成完整安全配置"""
+    def generate_security_all(config: dict,
+                            version: VrpVersion = VrpVersion.V5) -> str:
+        """生成完整安全配置（支持 VRP 版本区分）"""
         config_lines = ["#\n", "# 安全配置\n", "#\n"]
-        
+
         if "acls" in config:
             for acl in config["acls"]:
                 if acl.get("type") == "extended":
                     config_lines.append(SecurityConfigGenerator.generate_acl_ext(
                         acl["number"],
                         acl["rules"],
-                        acl.get("description")
+                        acl.get("description"),
+                        version  # 传递 VRP 版本
                     ))
                 else:
                     config_lines.append(SecurityConfigGenerator.generate_acl_std(
                         acl["number"],
                         acl["rules"],
-                        acl.get("description")
+                        acl.get("description"),
+                        version  # 传递 VRP 版本
                     ))
         
         if "port_security" in config:

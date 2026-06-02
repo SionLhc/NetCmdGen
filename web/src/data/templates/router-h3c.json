@@ -1,0 +1,35 @@
+{
+  "scene": "router",
+  "name": "H3C出口路由器",
+  "desc": "H3C Comware出口路由器，含NAT、静态路由、ACL、SSH",
+  "vendor": "h3c",
+  "config": {
+    "basic": {
+      "hostname": "H3C-GW-01",
+      "password": { "value": "Router@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 3 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1" },
+        { "dest": "192.168.0.0", "mask": "255.255.0.0", "next_hop": "10.0.0.2" }
+      ]
+    },
+    "security": {
+      "acls": [
+        { "number": 3000, "type": "extended", "description": "WAN-IN-FILTER",
+          "rules": [
+            { "action": "deny", "protocol": "tcp", "source": "any", "destination_port": "445" },
+            { "action": "permit", "protocol": "ip", "source": "any" }
+          ]}
+      ]
+    },
+    "interface": {
+      "eth_trunks": []
+    }
+  }
+}

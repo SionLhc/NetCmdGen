@@ -133,6 +133,12 @@ export const deviceIcons: Record<string, DeviceIcon> = {
     },
 
     // ── 安全设备 ────────────────────────────────────────
+    'routeros': {
+        type: 'routeros',
+        name: 'RouterOS (MikroTik)',
+        color: '#e2492f',
+        iconUrl: '/icons/routeros.svg',
+    },
     'firewall': {
         type: 'firewall',
         name: '防火墙',
@@ -164,7 +170,7 @@ export const deviceGroups: DeviceGroup[] = [
     {
         id: 'network',
         title: '网络设备',
-        devices: ['core-switch', 'agg-switch', 'access-switch', 'router',
+        devices: ['core-switch', 'agg-switch', 'access-switch', 'router', 'routeros',
                    'wireless-ac', 'wireless-ap', 'antenna', 'optical-transceiver']
             .map(t => deviceIcons[t]),
     },

@@ -38,6 +38,16 @@ export interface LinkData {
   bandwidth?: string
 }
 
+/** 设备级配置输出项 */
+export interface DeviceOutput {
+  device: string
+  vendor: string
+  vendorName: string
+  output: string
+  lines: number
+  error?: boolean
+}
+
 export const useTopologyStore = defineStore('topology', () => {
   // 设备类型定义
   const deviceTypes = ref<DeviceType[]>([
@@ -56,14 +66,23 @@ export const useTopologyStore = defineStore('topology', () => {
   // 当前选中的连线
   const selectedEdge = ref<any>(null)
 
-  // 生成的配置输出
+  // 生成的配置输出（兼容旧版单文本）
   const configOutput = ref('')
 
   // 是否正在生成配置
   const generating = ref(false)
 
+  /** 设备级输出列表：每台设备一行 */
+  const deviceOutputs = ref<DeviceOutput[]>([])
+  /** 当前选中的输出设备 Tab 索引 */
+  const activeOutputDevice = ref(0)
+  /** 当前选择的厂商 */
+  const outputVendor = ref('huawei')
+
   /** 从拓扑画布导出的设备列表（供命令工作台消费） */
   const exportedDevices = ref<TopologyDevice[]>([])
+  /** 从拓扑画布导出的连线列表 */
+  const exportedEdges = ref<TopologyEdgeExport[]>([])
 
   return {
     deviceTypes,
@@ -71,7 +90,11 @@ export const useTopologyStore = defineStore('topology', () => {
     selectedEdge,
     configOutput,
     generating,
+    deviceOutputs,
+    activeOutputDevice,
+    outputVendor,
     exportedDevices,
+    exportedEdges,
   }
 })
 
@@ -86,6 +109,9 @@ export interface TopologyDevice {
   description: string
   /** 从连线收集的端口信息：{ interface, remoteDevice, linkType, vlanId, ipNetwork }[] */
   ports: TopologyPort[]
+  /** 拓扑画布中的坐标（供拓扑图模式还原布局） */
+  x?: number
+  y?: number
 }
 
 /** 设备端口连接信息 */
@@ -100,4 +126,15 @@ export interface TopologyPort {
   bandwidth?: string
   /** 该端口是上行(uplink)还是下行(downlink) */
   direction: 'uplink' | 'downlink'
+}
+
+/** 拓扑连线导出数据 */
+export interface TopologyEdgeExport {
+  source: string    // 源设备 hostname
+  target: string    // 目标设备 hostname
+  linkType: string
+  vlanId?: number
+  bandwidth?: string
+  sourcePort?: string
+  targetPort?: string
 }

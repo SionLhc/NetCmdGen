@@ -1,0 +1,44 @@
+{
+  "scene": "access-switch",
+  "name": "H3C接入交换机",
+  "desc": "H3C S5130接入层配置，含VLAN划分、端口安全、DHCP Snooping Trust上联、ACL过滤、环路检测",
+  "vendor": "h3c",
+  "config": {
+    "basic": {
+      "hostname": "H3C-ACC-01",
+      "password": { "value": "H3cAcc@26", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "10.0.99.1" }] }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "Finance" },
+        { "id": 30, "name": "Guest" }
+      ],
+      "interfaces": [
+        { "interface": "GigabitEthernet1/0/1", "type": "access", "vlan_id": 10 },
+        { "interface": "GigabitEthernet1/0/2", "type": "access", "vlan_id": 10 },
+        { "interface": "GigabitEthernet1/0/5", "type": "access", "vlan_id": 20 },
+        { "interface": "GigabitEthernet1/0/48", "type": "trunk", "vlan_id": 1, "trunk_vlans": [10, 20, 30] }
+      ]
+    },
+    "security": {
+      "port_security": [
+        { "interface": "GigabitEthernet1/0/1", "max_mac": 1, "violation": "shutdown", "sticky": true },
+        { "interface": "GigabitEthernet1/0/5", "max_mac": 1, "violation": "restrict", "sticky": true }
+      ],
+      "dhcp_snooping": { "enable": true, "vlan": 10, "trusted_ports": ["GigabitEthernet1/0/48"] },
+      "storm_controls": [
+        { "interface": "GigabitEthernet1/0/48", "broadcast": 400, "multicast": 400, "action": "block" }
+      ]
+    },
+    "interface": {
+      "lldp": { "enable": true },
+      "loop_detect": { "enable": true, "interval": 5, "action": "block" }
+    }
+  }
+}

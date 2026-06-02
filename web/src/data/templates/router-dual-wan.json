@@ -1,0 +1,57 @@
+{
+  "scene": "router",
+  "name": "双WAN出口路由器",
+  "desc": "电信+联通双WAN口接入，策略路由实现多运营商分流，NAT Outbound，静态默认路由",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "GW-DUAL",
+      "password": { "value": "R0ut3r!@#", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "ntp1.aliyun.com" }] }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 1, "name": "Management" },
+        { "id": 10, "name": "LAN" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 1, "ip_address": "172.16.1.1", "mask": "255.255.255.0" },
+        { "vlan_id": 10, "ip_address": "172.16.10.1", "mask": "255.255.255.0" }
+      ]
+    },
+    "routing": {
+      "static_routes": [
+        { "dest_network": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "1.2.3.1" }
+      ],
+      "policy_route": {
+        "nodes": [
+          {
+            "number": 10,
+            "description": "电信出口优先",
+            "match": { "source_ip_pool": "LAN-Subnet" },
+            "apply": { "output_interface": "GigabitEthernet0/0/0" }
+          }
+        ]
+      }
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 2000,
+          "description": "NAT地址池",
+          "rules": [
+            { "action": "permit", "protocol": "ip", "source": "172.16.0.0", "source_wildcard": "0.0.255.255" }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "eth_trunks": [],
+      "lldp": { "enable": true }
+    }
+  }
+}

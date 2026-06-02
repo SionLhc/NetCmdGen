@@ -25,7 +25,7 @@ export interface GenerateReq {
 export interface GenerateFullReq {
   vendor: string
   config: Record<string, unknown>
-  vrp_version?: 'v5' | 'v8' | 'v300'
+  vrp_version?: 'v5' | 'v8' | 'v300' | 'v7' | 'v6'  // v5/v8/v300=华为, v7=华三, v6/v7=RouterOS
   topology_context?: Record<string, unknown>
   scene?: 'campus_core' | 'campus_access' | 'campus_agg'
 }
@@ -87,14 +87,25 @@ export interface ManualItem {
   command: string
   description: string
   example: string
+  versions?: string[]  // 版本标记，undefined 表示全版本通用
 }
 
-export const getManualList = (vendor: string, keyword = '') =>
+export interface ManualVersion {
+  code: string
+  name: string
+}
+
+export const getManualList = (vendor: string, keyword = '', version = 'all') =>
   api
-    .get<{ items: ManualItem[]; total: number }>(`/manual/${vendor}`, {
-      params: { keyword },
+    .get<{ items: ManualItem[]; total: number; version: string }>(`/manual/${vendor}`, {
+      params: { keyword, version },
     })
     .then((r) => r.data)
+
+export const getManualVersions = (vendor: string) =>
+  api
+    .get<{ vendor: string; versions: ManualVersion[] }>(`/manual/${vendor}/versions`)
+    .then((r) => r.data.versions)
 
 export const getManualTree = (vendor: string) =>
   api.get<{ tree: Record<string, unknown> }>(`/manual/${vendor}/tree`).then((r) => r.data.tree)

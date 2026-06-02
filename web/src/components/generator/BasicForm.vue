@@ -92,7 +92,7 @@ function emitUpdate() {
     }
     if (form.enable_ntp && form.ntp_servers) {
         params.ntp = {
-            servers: form.ntp_servers.split(',').map(s => ({ ip: s.trim() })),
+            servers: form.ntp_servers.split(',').map((s: string) => ({ ip: s.trim() })),
         }
     }
     if (form.enable_snmp) {

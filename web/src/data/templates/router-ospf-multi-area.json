@@ -1,0 +1,61 @@
+{
+  "scene": "router",
+  "name": "OSPF多区域边界路由器",
+  "desc": "OSPF Area Border Router，Area 0 + Area 1互联，路由汇总+LSA过滤，BFD快速检测",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "ABR-01",
+      "password": { "value": "Abr@2026!", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "192.168.1.1" }] }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Area0-Interconnect" },
+        { "id": 20, "name": "Area1-Interconnect" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 10, "ip_address": "10.0.0.2", "mask": "255.255.255.252" },
+        { "vlan_id": 20, "ip_address": "10.0.1.1", "mask": "255.255.255.252" }
+      ]
+    },
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "3.3.3.3",
+        "area_id": "0",
+        "networks": [
+          { "address": "10.0.0.0", "mask": "0.0.0.3" }
+        ],
+        "areas": [
+          {
+            "area_id": "1",
+            "networks": [
+              { "address": "10.0.1.0", "mask": "0.0.0.3" }
+            ],
+            "range_summary": "192.168.0.0/16"
+          }
+        ]
+      }
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 2000,
+          "description": "管理ACL",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "192.168.1.0", "source_wildcard": "0.0.0.255", "dest_port": "22" }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "eth_trunks": [],
+      "lldp": { "enable": true, "mode": "both" }
+    }
+  }
+}

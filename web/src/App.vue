@@ -1,6 +1,5 @@
 <template>
   <div class="app-shell">
-    <!-- 侧边导航 -->
     <aside class="sidebar">
       <div class="sidebar-logo">
         <div class="logo-icon-wrap">
@@ -8,9 +7,12 @@
         </div>
         <span class="logo-text">NetCmdGen</span>
       </div>
-
       <nav class="sidebar-nav">
-        <router-link to="/" class="nav-item" active-class="nav-active">
+        <router-link to="/" class="nav-item" active-class="nav-active" exact-active-class="nav-active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span>首页</span>
+        </router-link>
+        <router-link to="/generate" class="nav-item" active-class="nav-active">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
           <span>命令工作台</span>
         </router-link>
@@ -27,12 +29,10 @@
           <span>命令速查</span>
         </router-link>
       </nav>
-
       <div class="sidebar-footer">
         <div class="version-tag">v0.2.0</div>
       </div>
     </aside>
-
     <main class="main-content">
       <router-view />
     </main>
@@ -47,29 +47,32 @@ html, body, #app { height: 100%; font-family: 'Inter', 'PingFang SC', 'Microsoft
 
 :root { --el-color-primary: #6366f1; --el-color-primary-light-3: #818cf8; --el-color-primary-light-5: #a5b4fc; --el-border-radius-base: 8px; }
 
-.el-button--primary { background: linear-gradient(135deg, #6366f1, #4f46e5) !important; border: none !important; box-shadow: 0 2px 8px rgba(99,102,241,0.3) !important; }
-.el-button--primary:hover { box-shadow: 0 4px 16px rgba(99,102,241,0.45) !important; }
+.el-button { border-radius: 8px; font-weight: 500; }
+.el-button--primary { background: linear-gradient(135deg, #6366f1, #4f46e5) !important; border: none !important; color: #fff !important; box-shadow: 0 2px 8px rgba(99,102,241,0.3) !important; }
+.el-button--primary:hover { box-shadow: 0 4px 16px rgba(99,102,241,0.45) !important; transform: translateY(-1px); }
+.el-button--primary.is-link { background: transparent !important; color: #6366f1 !important; box-shadow: none !important; }
+.el-button--primary.is-link:hover { background: rgba(99,102,241,0.08) !important; box-shadow: none !important; transform: none; }
+.el-button--default { background: #fff; border-color: #d1d5db; color: #374151; }
+.el-button--default:hover { border-color: #6366f1; color: #6366f1; }
+
+
 .el-tabs__active-bar { background: #6366f1 !important; }
 .el-tabs__item.is-active { color: #6366f1 !important; }
 .el-divider__text { background: #f8f9fb !important; }
 
 .app-shell { display: flex; height: 100vh; overflow: hidden; }
-
 .sidebar { width: 220px; height: 100vh; background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); display: flex; flex-direction: column; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.06); }
 .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 20px 20px 24px; }
 .logo-icon-wrap { width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
 .logo-svg { width: 22px; height: 22px; color: #fff; }
 .logo-text { font-size: 18px; font-weight: 700; color: #f1f5f9; letter-spacing: 0.5px; }
-
 .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; color: #94a3b8; text-decoration: none; font-size: 14px; font-weight: 500; transition: all 0.2s ease; }
 .nav-item:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
 .nav-active { background: rgba(99,102,241,0.15) !important; color: #a5b4fc !important; }
 .nav-active .nav-icon { color: #818cf8; }
 .nav-icon { width: 20px; height: 20px; flex-shrink: 0; }
-
 .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.06); }
 .version-tag { font-size: 11px; color: #475569; text-align: center; }
-
 .main-content { flex: 1; overflow: auto; padding: 20px 24px; background: #f0f2f5; }
 </style>

@@ -302,9 +302,9 @@ MAIPU_COMMANDS = {
     },
     "QoS配置": {
         "优先级映射": [
-            {"name": "配置信任DSCP", "command": "interface <if>\nmpls qos trust dscp", "description": "信任DSCP优先级", "example": "interface gigabitethernet 0/1\nmpls qos trust dscp"},
-            {"name": "配置信任CoS", "command": "interface <if>\nmpls qos trust cos", "description": "信任CoS/802.1p优先级", "example": "interface gigabitethernet 0/1\nmpls qos trust cos"},
-            {"name": "设置DSCP值", "command": "interface <if>\nmpls qos dscp <value>", "description": "为流量标记DSCP值", "example": "interface gigabitethernet 0/1\nmpls qos dscp 46"}
+            {"name": "配置信任DSCP", "command": "interface <if>\nmpls qos trust dscp", "description": "信任DSCP优先级（MyPower V8特性）", "example": "interface gigabitethernet 0/1\nmpls qos trust dscp", "versions": ["v8"]},
+            {"name": "配置信任CoS", "command": "interface <if>\nmpls qos trust cos", "description": "信任CoS/802.1p优先级（MyPower V8特性）", "example": "interface gigabitethernet 0/1\nmpls qos trust cos", "versions": ["v8"]},
+            {"name": "设置DSCP值", "command": "interface <if>\nmpls qos dscp <value>", "description": "为流量标记DSCP值（MyPower V8特性）", "example": "interface gigabitethernet 0/1\nmpls qos dscp 46", "versions": ["v8"]}
         ],
         "流量整形与限速": [
             {"name": "接口限速", "command": "interface <if>\nrate-limit input <bps> <burst-normal> <burst-max> conform-action <action>\nrate-limit output <bps> <burst-normal> <burst-max> conform-action <action>", "description": "接口限速(committed access rate)", "example": "interface gigabitethernet 0/1\nrate-limit input 10000000 1875000 3750000 conform-action transmit exceed-action drop"},

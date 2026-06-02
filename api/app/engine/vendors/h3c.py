@@ -2,20 +2,27 @@
 # -*- coding: utf-8 -*-
 """
 H3C华三交换机配置生成器
+
+支持 Comware V5 / V7 版本区分：
+- V5: acl number, ssh server compatible-ssh1x
+- V7: acl basic/advanced, 不需要 compatible-ssh1x
 """
 
 import time
 from typing import Dict, List, Optional, Any
 
+from app.engine.vendors.h3c_version import ComwareVersion, get_cmd
+
 
 class H3CConfigGenerator:
     """H3C华三交换机配置生成器"""
-    
+
     @staticmethod
-    def generate_header(description: str = "H3C Switch Configuration") -> str:
+    def generate_header(description: str = "H3C Switch Configuration",
+                       version: ComwareVersion = ComwareVersion.V5) -> str:
         """生成配置头部注释"""
         return f"""#
-# H3C华三交换机配置脚本
+# H3C华三交换机配置脚本 (Comware {version.value.upper()})
 # 描述: {description}
 # 生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
 # 设备品牌: H3C (Huawei-3Com)
@@ -23,75 +30,71 @@ class H3CConfigGenerator:
 """
     
     @staticmethod
-    def generate_basic_config(config: Dict[str, Any]) -> str:
+    def generate_basic_config(config: Dict[str, Any],
+                              version: ComwareVersion = ComwareVersion.V5) -> str:
         """
-        生成基础配置
-        
+        生成基础配置（支持 Comware V5/V7 版本区分）
+
         Args:
             config: 基础配置字典
-                - hostname: 主机名
-                - password: 密码配置
-                - mgmt_interface: 管理接口配置
-                - ssh: SSH配置
-                - telnet: Telnet配置
-                - user: 用户配置
-                
-        Returns:
-            配置字符串
+            version: Comware 系统版本
         """
         lines = []
-        lines.append("\n# ==================== 基础配置 ====================")
+        lines.append(f"\n# ==================== 基础配置 (Comware {version.value.upper()}) ====================")
         lines.append("#\n# 设备基本设置\n#")
-        
+
         if config.get("hostname"):
             lines.append(f"\nsysname {config['hostname']}")
-        
+
         if config.get("password"):
             pwd_config = config["password"]
             pwd = pwd_config.get("value", "")
             encrypted = pwd_config.get("encrypted", False)
-            
+
             if encrypted:
                 lines.append(f"\nsuper password cipher {pwd}")
             else:
                 lines.append(f"\nsuper password simple {pwd}")
-        
+
         if config.get("mgmt_interface"):
             mgmt = config["mgmt_interface"]
             interface = mgmt.get("interface", "Vlan-interface1")
             ip = mgmt.get("ip_address", "")
             mask = mgmt.get("mask", "255.255.255.0")
             gateway = mgmt.get("gateway", "")
-            
+
             if ip:
                 lines.append(f"\ninterface {interface}")
                 lines.append(f" ip address {ip} {mask}")
                 lines.append(" quit")
-            
+
             if gateway:
                 lines.append(f"\nip route-static 0.0.0.0 0 {gateway}")
-        
+
         if config.get("enable_ssh"):
             ssh_config = config.get("ssh", {})
             port = ssh_config.get("port", 22)
             timeout = ssh_config.get("timeout", 60)
             attempts = ssh_config.get("max_auth_attempts", 5)
-            version = ssh_config.get("version", "2")
-            
+            ssh_ver = ssh_config.get("version", "2")
+
             lines.append(f"\n# SSH服务器配置")
-            lines.append(f"ssh server enable")
+            lines.append(get_cmd(version, "ssh_enable"))
             lines.append(f"ssh server port {port}")
             lines.append(f"ssh server timeout {timeout}")
             lines.append(f"ssh server authentication-timeout {timeout}")
             lines.append(f"ssh server max-auth-times {attempts}")
-            lines.append(f"ssh server compatible-ssh1-{version} disable")
-            
+            # V5: ssh server compatible-ssh1-2 disable, V7: 跳过
+            compat = get_cmd(version, "ssh_compat", ver=ssh_ver)
+            if compat:
+                lines.append(compat)
+
             if config.get("ssh_user"):
                 user = config["ssh_user"]
                 username = user.get("username", "admin")
                 password = user.get("password", "")
                 user_type = user.get("type", "password")
-                
+
                 lines.append(f"\nlocal-user {username}")
                 lines.append(f" password simple {password}")
                 lines.append(f" service-type ssh")
@@ -316,10 +319,24 @@ class H3CConfigGenerator:
                 
                 lines.append(" quit")
         
+        if config.get("vrrp"):
+            lines.append("\n# VRRP网关冗余")
+            for v in config["vrrp"]:
+                iface = v.get("interface", "Vlan-interface10")
+                vrid = v.get("vrid", 1)
+                vip = v.get("virtual_ip", "")
+                prio = v.get("priority", 100)
+                lines.append(f"interface {iface}")
+                if vip:
+                    lines.append(f" vrrp vrid {vrid} virtual-ip {vip}")
+                lines.append(f" vrrp vrid {vrid} priority {prio}")
+                lines.append(" quit")
+        
         return "\n".join(lines)
     
     @staticmethod
-    def generate_security_config(config: Dict[str, Any]) -> str:
+    def generate_security_config(config: Dict[str, Any],
+                                version: ComwareVersion = ComwareVersion.V5) -> str:
         """
         生成安全配置
         
@@ -343,8 +360,12 @@ class H3CConfigGenerator:
                 acl_num = acl.get("number", 2000)
                 acl_type = "basic" if 2000 <= acl_num < 3000 else "advanced"
                 rules = acl.get("rules", [])
-                
-                lines.append(f"\nacl number {acl_num}")
+
+                # V5: acl number, V7: acl basic / acl advanced
+                if acl_type == "basic":
+                    lines.append(get_cmd(version, "acl_basic", num=acl_num))
+                else:
+                    lines.append(get_cmd(version, "acl_advanced", num=acl_num))
                 
                 for i, rule in enumerate(rules, 1):
                     action = rule.get("action", "permit")
@@ -548,46 +569,120 @@ class H3CConfigGenerator:
         return "\n".join(lines)
     
     @staticmethod
-    def generate_all(config: Dict[str, Any]) -> str:
+    def generate_wan_config(config: Dict[str, Any]) -> str:
+        """生成 H3C 路由器 WAN/PPPoE/NAT 配置"""
+        if not config:
+            return ""
+        lines = ["# ==================== WAN 广域网 ===================="]
+        conn = config.get("connectionType", "pppoe")
+        # PPPoE
+        if conn == "pppoe":
+            user = config.get("pppoeUser", "vpdnuser")
+            passwd = config.get("pppoePass", "user1234")
+            physical = config.get("pppoePhysical", "GigabitEthernet0/0/0")
+            lines.append("dialer-group 1 rule ip permit")
+            lines.append("")
+            lines.append("interface Dialer1")
+            lines.append(" dialer bundle enable")
+            lines.append(" dialer-group 1")
+            lines.append(" ip address ppp-negotiate")
+            lines.append(f" ppp chap user {user}")
+            lines.append(f" ppp chap password simple {passwd}")
+            lines.append(" dialer timer idle 0")
+            lines.append(" nat outbound")
+            lines.append("")
+            lines.append(f"interface {physical}")
+            lines.append(" pppoe-client dial-bundle-number 1")
+            lines.append("")
+            lines.append("ip route-static 0.0.0.0 0 Dialer 1")
+        # 静态IP
+        elif conn == "static":
+            physical = config.get("staticPhysical", "GigabitEthernet0/0/0")
+            ip = config.get("staticIp", "")
+            mask = config.get("staticMask", "255.255.255.0")
+            gw = config.get("staticGateway", "")
+            if ip:
+                lines.append(f"interface {physical}")
+                lines.append(f" ip address {ip} {mask}")
+                lines.append(" nat outbound")
+                lines.append("")
+            if gw:
+                lines.append(f"ip route-static 0.0.0.0 0 {gw}")
+        # DHCP
+        elif conn == "dhcp":
+            physical = config.get("dhcpPhysical", "GigabitEthernet0/0/0")
+            lines.append(f"interface {physical}")
+            lines.append(" ip address dhcp-alloc")
+            lines.append(" nat outbound")
+        # DNAT
+        dnat = config.get("dnatRules", [])
+        if dnat and config.get("natEnabled", True):
+            lines.append("")
+            lines.append("# DNAT 端口映射")
+            for r in dnat:
+                proto = r.get("protocol", "tcp")
+                port = r.get("publicPort", 80)
+                in_ip = r.get("internalIp", "")
+                in_port = r.get("internalPort", port)
+                if in_ip:
+                    lines.append(f"nat server protocol {proto} global current-interface {port} inside {in_ip} {in_port}")
+        # DHCP Server
+        if config.get("dhcpEnabled"):
+            iface = config.get("dhcpInterface", "Vlanif1")
+            net = config.get("dhcpNetwork", "192.168.1.0")
+            mask = config.get("dhcpMask", "255.255.255.0")
+            gw = config.get("dhcpGateway", "192.168.1.1")
+            dns = config.get("dhcpDns", "114.114.114.114")
+            lines.append("")
+            lines.append("# DHCP Server")
+            lines.append("dhcp enable")
+            lines.append("dhcp server ip-pool pool1")
+            lines.append(f" network {net} mask {mask}")
+            lines.append(f" gateway-list {gw}")
+            lines.append(f" dns-list {dns}")
+            lines.append(" quit")
+            lines.append(f"interface {iface}")
+            lines.append(f" ip address {gw} {mask}")
+        return "\n".join(lines) + "\n"
+
+    @staticmethod
+    def generate_all(config: Dict[str, Any],
+                    version: ComwareVersion = ComwareVersion.V5) -> str:
         """
-        生成完整配置
-        
+        生成完整配置（支持 Comware V5/V7 版本区分）
+
         Args:
             config: 完整配置字典
-                - basic: 基础配置
-                - vlan: VLAN配置
-                - routing: 路由配置
-                - security: 安全配置
-                - interface: 接口配置
-                - service: 服务配置
-                
-        Returns:
-            完整配置字符串
+            version: Comware 系统版本
         """
         sections = []
-        
+
         sections.append(H3CConfigGenerator.generate_header(
-            config.get("description", "H3C Switch Configuration")
+            config.get("description", "H3C Switch Configuration"),
+            version
         ))
-        
+
         if config.get("basic"):
-            sections.append(H3CConfigGenerator.generate_basic_config(config["basic"]))
-        
+            sections.append(H3CConfigGenerator.generate_basic_config(config["basic"], version))
+
+        if config.get("wan"):
+            sections.append(H3CConfigGenerator.generate_wan_config(config["wan"]))
+
         if config.get("vlan"):
             sections.append(H3CConfigGenerator.generate_vlan_config(config["vlan"]))
-        
+
         if config.get("routing"):
             sections.append(H3CConfigGenerator.generate_routing_config(config["routing"]))
-        
+
         if config.get("security"):
-            sections.append(H3CConfigGenerator.generate_security_config(config["security"]))
-        
+            sections.append(H3CConfigGenerator.generate_security_config(config["security"], version))
+
         if config.get("interface"):
             sections.append(H3CConfigGenerator.generate_interface_config(config["interface"]))
-        
+
         if config.get("service"):
             sections.append(H3CConfigGenerator.generate_service_config(config["service"]))
-        
+
         sections.append("\n\nreturn")
-        
+
         return "\n".join(sections)

@@ -31,9 +31,9 @@
           <el-col :span="2"><el-button text type="danger" size="small" @click="acl.rules.splice(idx,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="acl.rules.push({action:'permit',protocol:'ip',source:'any'});emitUpdate()" style="width:100%">+ 添加规则</el-button>
+      <el-button size="small" type="primary" plain @click="acl.rules.push({action:'permit',protocol:'ip',source:'any'});emitUpdate()" style="width:100%">+ 添加规则</el-button>
     </div>
-    <el-button size="small" plain @click="acls.push({number:2000,rules:[{action:'permit',protocol:'ip',source:'any'}],description:''});emitUpdate()" style="width:100%">+ 添加 ACL</el-button>
+    <el-button size="small" type="primary" plain @click="acls.push({number:2000,rules:[{action:'permit',protocol:'ip',source:'any'}],description:''});emitUpdate()" style="width:100%">+ 添加 ACL</el-button>
 
     <!-- 端口安全 -->
     <el-divider content-position="left">端口安全</el-divider>
@@ -54,7 +54,7 @@
       </el-row>
       <el-checkbox v-model="ps.sticky" @change="emitUpdate">Sticky MAC</el-checkbox>
     </div>
-    <el-button size="small" plain @click="portSecurity.push({interface:'',max_mac:1,violation:'protect',sticky:false});emitUpdate()" style="width:100%">+ 添加端口安全</el-button>
+    <el-button size="small" type="primary" plain @click="portSecurity.push({interface:'',max_mac:1,violation:'protect',sticky:false});emitUpdate()" style="width:100%">+ 添加端口安全</el-button>
 
     <!-- 流量过滤 -->
     <el-divider content-position="left">流量过滤</el-divider>
@@ -71,7 +71,7 @@
         <el-col :span="2"><el-button text type="danger" @click="trafficFilters.splice(idx,1);emitUpdate()">✕</el-button></el-col>
       </el-row>
     </div>
-    <el-button size="small" plain @click="trafficFilters.push({interface:'',acl_number:3000,direction:'inbound'});emitUpdate()" style="width:100%">+ 添加流量过滤</el-button>
+    <el-button size="small" type="primary" plain @click="trafficFilters.push({interface:'',acl_number:3000,direction:'inbound'});emitUpdate()" style="width:100%">+ 添加流量过滤</el-button>
   </el-form>
 </template>
 

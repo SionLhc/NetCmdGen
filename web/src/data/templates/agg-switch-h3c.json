@@ -1,0 +1,59 @@
+{
+  "scene": "agg-switch",
+  "name": "H3C汇聚交换机 MSTP+VRRP",
+  "desc": "H3C S5560X汇聚层，含MSTP多实例(Instance0/1)、VRRP主备、上行Eth-Trunk、风暴抑制",
+  "vendor": "h3c",
+  "config": {
+    "basic": {
+      "hostname": "H3C-Agg-01",
+      "password": { "value": "H3cAgg@26", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "10.1.1.1" }] }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "Finance" },
+        { "id": 30, "name": "Guest" },
+        { "id": 99, "name": "Mgmt" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 10, "ip_address": "10.0.10.253", "mask": "255.255.255.0" },
+        { "vlan_id": 20, "ip_address": "10.0.20.253", "mask": "255.255.255.0" },
+        { "vlan_id": 99, "ip_address": "10.0.99.1", "mask": "255.255.255.0" }
+      ]
+    },
+    "routing": {
+      "ospf": {
+        "process_id": 1,
+        "router_id": "10.0.99.1",
+        "area_id": "0",
+        "networks": [
+          { "address": "10.0.10.0", "mask": "0.0.0.255" },
+          { "address": "10.0.20.0", "mask": "0.0.0.255" },
+          { "address": "10.0.99.0", "mask": "0.0.0.255" }
+        ]
+      }
+    },
+    "security": {
+      "storm_controls": [
+        { "interface": "Ten-GigabitEthernet1/0/49", "broadcast": 500, "multicast": 500, "action": "block" },
+        { "interface": "Ten-GigabitEthernet1/0/50", "broadcast": 500, "multicast": 500, "action": "block" }
+      ]
+    },
+    "interface": {
+      "eth_trunks": [
+        {
+          "trunk_id": 1,
+          "description": "To-H3C-Core",
+          "mode": "lacp-static",
+          "member_ports": ["Ten-GigabitEthernet1/0/49", "Ten-GigabitEthernet1/0/50"]
+        }
+      ],
+      "lldp": { "enable": true, "interval": 30 }
+    }
+  }
+}

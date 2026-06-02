@@ -147,10 +147,24 @@ class RoutingConfigGenerator:
         return "".join(config_lines)
     
     @staticmethod
+    def generate_vrrp(interface: str, vrid: int, virtual_ip: str,
+                     priority: int = 100, preempt: bool = True,
+                     advertise_interval: int = 1) -> str:
+        """生成 VRRP 配置"""
+        lines = [f"interface {interface}"]
+        lines.append(f" vrrp vrid {vrid} virtual-ip {virtual_ip}")
+        lines.append(f" vrrp vrid {vrid} priority {priority}")
+        if not preempt:
+            lines.append(f" vrrp vrid {vrid} preempt-mode disable")
+        lines.append(f" vrrp vrid {vrid} timer advertise {advertise_interval}")
+        lines.append("#\n")
+        return "\n".join(lines)
+
+    @staticmethod
     def generate_route_all(config: dict) -> str:
         """生成完整路由配置"""
         config_lines = ["#\n", "# 路由配置\n", "#\n"]
-        
+
         if "static_routes" in config:
             for route in config["static_routes"]:
                 config_lines.append(RoutingConfigGenerator.generate_static_route(
@@ -160,13 +174,13 @@ class RoutingConfigGenerator:
                     route.get("interface"),
                     route.get("preference")
                 ))
-        
+
         if "default_route" in config:
             config_lines.append(RoutingConfigGenerator.generate_default_route(
                 config["default_route"].get("next_hop"),
                 config["default_route"].get("interface")
             ))
-        
+
         if "ospf" in config:
             config_lines.append("\n#\n# OSPF配置\n#\n")
             ospf_conf = config["ospf"]
@@ -178,7 +192,7 @@ class RoutingConfigGenerator:
                 ospf_conf.get("interfaces"),
                 ospf_conf.get("cost")
             ))
-        
+
         if "ospf_interfaces" in config:
             for iface in config["ospf_interfaces"]:
                 config_lines.append(RoutingConfigGenerator.generate_ospf_interface(
@@ -188,7 +202,7 @@ class RoutingConfigGenerator:
                     iface.get("hello_time", 10),
                     iface.get("dead_time", 40)
                 ))
-        
+
         if "bgp" in config:
             config_lines.append("\n#\n# BGP配置\n#\n")
             bgp_conf = config["bgp"]
@@ -199,7 +213,7 @@ class RoutingConfigGenerator:
                 bgp_conf.get("networks"),
                 bgp_conf.get("import_routes")
             ))
-        
+
         if "rip" in config:
             config_lines.append("\n#\n# RIP配置\n#\n")
             rip_conf = config["rip"]
@@ -208,5 +222,17 @@ class RoutingConfigGenerator:
                 rip_conf.get("networks"),
                 rip_conf.get("import_routes")
             ))
-        
+
+        if "vrrp" in config:
+            config_lines.append("\n#\n# VRRP网关冗余配置\n#\n")
+            for v in config["vrrp"]:
+                config_lines.append(RoutingConfigGenerator.generate_vrrp(
+                    v["interface"],
+                    v["vrid"],
+                    v["virtual_ip"],
+                    v.get("priority", 100),
+                    v.get("preempt", True),
+                    v.get("advertise_interval", 1)
+                ))
+
         return "".join(config_lines)

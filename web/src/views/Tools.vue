@@ -146,7 +146,7 @@
             <el-button @click="onWhois" :loading="loading">Whois</el-button>
           </el-form-item>
         </el-form>
-        <el-table v-if="dnsResult?.records?.length" :data="dnsResult.records.map(r => typeof r === 'string' ? { value: r } : r)" border class="result-table">
+        <el-table v-if="dnsResult?.records?.length" :data="dnsResult.records.map((r: any) => typeof r === 'string' ? { value: r } : r)" border class="result-table">
           <el-table-column prop="value" label="结果" />
           <el-table-column v-if="dnsResult.records[0]?.priority" prop="priority" label="优先级" width="100" />
         </el-table>

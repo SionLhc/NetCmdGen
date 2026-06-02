@@ -17,6 +17,7 @@ from app.engine.vendors.huawei.routing import RoutingConfigGenerator
 from app.engine.vendors.huawei.security import SecurityConfigGenerator
 from app.engine.vendors.huawei.interface import InterfaceConfigGenerator
 from app.engine.vendors.huawei.qos import QoSConfigGenerator
+from app.engine.vendors.huawei.wan import HuaweiWanGenerator
 from app.engine.vendors.huawei.version_config import VrpVersion
 
 
@@ -91,9 +92,9 @@ class HuaweiAdapter:
         """生成路由配置（静态路由 / OSPF / BGP / RIP / 默认路由）。"""
         return RoutingConfigGenerator.generate_route_all(params)
 
-    def _gen_security(self, params: Dict[str, Any]) -> str:
+    def _gen_security(self, params: Dict[str, Any], version: VrpVersion = VrpVersion.V5) -> str:
         """生成安全配置（ACL / 端口安全 / MAC绑定 / 802.1X / RADIUS / DHCP Snooping 等）。"""
-        return SecurityConfigGenerator.generate_security_all(params)
+        return SecurityConfigGenerator.generate_security_all(params, version)
 
     def _gen_interface(self, params: Dict[str, Any]) -> str:
         """生成接口配置（Eth-Trunk 聚合 / LACP / LLDP / PoE / 端口隔离 / 环路检测 / 限速）。"""
@@ -137,13 +138,18 @@ class HuaweiAdapter:
             "#\n",
         ]
 
-        for key in ("basic", "vlan", "routing", "security", "interface", "qos"):
+        for key in ("basic", "vlan", "routing", "security", "interface", "qos", "wan"):
             if key in config:
                 if key == "basic":
-                    # 基础配置使用版本感知的批量生成
                     sections.append(
                         BasicConfigGenerator.generate_basic_all(config[key], version)
                     )
+                elif key == "security":
+                    # 安全配置（ACL语法区分版本）
+                    sections.append(self._gen_security(config[key], version))
+                elif key == "wan":
+                    # WAN / PPPoE / NAT 路由器专属配置
+                    sections.append(HuaweiWanGenerator.generate_wan_all(config[key]))
                 else:
                     sections.append(self.generate(key, config[key]))
 

@@ -1,0 +1,32 @@
+{
+  "scene": "router",
+  "name": "H3C双WAN出口路由器",
+  "desc": "H3C双链路出口路由器，含策略路由、NAT、链路备份",
+  "vendor": "h3c",
+  "config": {
+    "basic": {
+      "hostname": "H3C-DW-01",
+      "password": { "value": "Router@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 3 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1" },
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "198.51.100.1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        { "number": 3000, "type": "extended",
+          "rules": [
+            { "action": "permit", "protocol": "ip", "source": "192.168.10.0", "destination": "any" },
+            { "action": "deny", "protocol": "ip", "source": "any" }
+          ]}
+      ]
+    }
+  }
+}

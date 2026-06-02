@@ -10,7 +10,7 @@
         <el-col :span="2"><el-button text type="danger" @click="staticRoutes.splice(idx,1);emitUpdate()">✕</el-button></el-col>
       </el-row>
     </div>
-    <el-button size="small" plain @click="staticRoutes.push({dest:'',mask:'255.255.255.0',nexthop:''});emitUpdate()" style="width:100%">+ 添加静态路由</el-button>
+    <el-button size="small" type="primary" plain @click="staticRoutes.push({dest:'',mask:'255.255.255.0',nexthop:''});emitUpdate()" style="width:100%">+ 添加静态路由</el-button>
 
     <!-- OSPF -->
     <el-divider content-position="left">OSPF</el-divider>
@@ -35,7 +35,7 @@
           <el-col :span="3"><el-button text type="danger" @click="ospfNetworks.splice(idx,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="ospfNetworks.push({network:'',wildcard:'0.0.0.255',area:'0'});emitUpdate()" style="width:100%">+ 添加网段</el-button>
+      <el-button size="small" type="primary" plain @click="ospfNetworks.push({network:'',wildcard:'0.0.0.255',area:'0'});emitUpdate()" style="width:100%">+ 添加网段</el-button>
     </template>
 
     <!-- BGP -->
@@ -57,7 +57,7 @@
           <el-col :span="4"><el-button text type="danger" @click="bgpPeers.splice(idx,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="bgpPeers.push({ip:'',remote_as:65001});emitUpdate()" style="width:100%">+ 添加 BGP 邻居</el-button>
+      <el-button size="small" type="primary" plain @click="bgpPeers.push({ip:'',remote_as:65001});emitUpdate()" style="width:100%">+ 添加 BGP 邻居</el-button>
     </template>
   </el-form>
 </template>

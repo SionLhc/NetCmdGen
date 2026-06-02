@@ -23,9 +23,9 @@
           <el-col :span="3"><el-button text type="danger" size="small" @click="cls.rules.splice(ri,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="cls.rules.push({type:'dscp',value:'46'});emitUpdate()">+ 规则</el-button>
+      <el-button size="small" type="primary" plain @click="cls.rules.push({type:'dscp',value:'46'});emitUpdate()">+ 规则</el-button>
     </div>
-    <el-button size="small" plain @click="classifiers.push({name:'Class1',rules:[{type:'dscp',value:'46'}]});emitUpdate()" style="width:100%">+ 添加分类</el-button>
+    <el-button size="small" type="primary" plain @click="classifiers.push({name:'Class1',rules:[{type:'dscp',value:'46'}]});emitUpdate()" style="width:100%">+ 添加分类</el-button>
 
     <!-- 流行为 -->
     <el-divider content-position="left">流行为</el-divider>
@@ -53,9 +53,9 @@
           <el-col :span="3"><el-button text type="danger" size="small" @click="b.actions.splice(ai,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="b.actions.push({type:'remark_dscp',value:'46'});emitUpdate()">+ 动作</el-button>
+      <el-button size="small" type="primary" plain @click="b.actions.push({type:'remark_dscp',value:'46'});emitUpdate()">+ 动作</el-button>
     </div>
-    <el-button size="small" plain @click="behaviors.push({name:'Behav1',actions:[{type:'remark_dscp',value:'46'}]});emitUpdate()" style="width:100%">+ 添加行为</el-button>
+    <el-button size="small" type="primary" plain @click="behaviors.push({name:'Behav1',actions:[{type:'remark_dscp',value:'46'}]});emitUpdate()" style="width:100%">+ 添加行为</el-button>
 
     <!-- 流策略 -->
     <el-divider content-position="left">流策略</el-divider>
@@ -72,9 +72,9 @@
           <el-col :span="2"><el-button text type="danger" size="small" @click="p.pairs.splice(pi,1);emitUpdate()">✕</el-button></el-col>
         </el-row>
       </div>
-      <el-button size="small" plain @click="p.pairs.push({classifier:'',behavior:''});emitUpdate()">+ 绑定</el-button>
+      <el-button size="small" type="primary" plain @click="p.pairs.push({classifier:'',behavior:''});emitUpdate()">+ 绑定</el-button>
     </div>
-    <el-button size="small" plain @click="policies.push({name:'Policy1',pairs:[]});emitUpdate()" style="width:100%">+ 添加策略</el-button>
+    <el-button size="small" type="primary" plain @click="policies.push({name:'Policy1',pairs:[]});emitUpdate()" style="width:100%">+ 添加策略</el-button>
   </el-form>
 </template>
 

@@ -1,0 +1,31 @@
+{
+  "scene": "router",
+  "name": "迈普出口路由器",
+  "desc": "迈普MyPower出口路由器，含NAT、静态路由、ACL、管理",
+  "vendor": "maipu",
+  "config": {
+    "basic": {
+      "hostname": "MP-GW-01",
+      "password": { "value": "Router@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        { "number": 100, "type": "extended",
+          "rules": [
+            { "action": "deny", "protocol": "tcp", "source": "any", "destination_port": "23" },
+            { "action": "permit", "protocol": "ip", "source": "any" }
+          ]}
+      ]
+    }
+  }
+}

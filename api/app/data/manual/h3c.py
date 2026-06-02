@@ -252,14 +252,15 @@ H3C_COMMANDS = {
             "激活IRF配置": {"command": "irf-port-configuration active", "description": "激活IRF配置", "example": "[H3C] irf-port-configuration active"},
             "查看IRF状态": {"command": "display irf", "description": "查看IRF状态", "example": "<H3C> display irf"},
             "查看IRF拓扑": {"command": "display irf topology", "description": "查看IRF拓扑", "example": "<H3C> display irf topology"},
-            "IRF合并检测": {"command": "mad enable", "description": "启用MAD多Active检测", "example": "[H3C] mad enable"}
+            "IRF合并检测": {"command": "mad enable\nexclude interface <interface>", "description": "启用MAD多Active检测（Comware V7增强）", "example": "[H3C] mad enable\n[H3C] mad exclude interface GigabitEthernet1/0/48", "versions": ["v7"]}
         },
         "BFD配置": {
             "启用BFD": {"command": "bfd", "description": "全局启用BFD", "example": "[H3C] bfd"},
             "创建BFD会话": {"command": "bfd <session-name> bind peer-interface <interface> source-ip <ip> destination-ip <ip>", "description": "创建BFD会话", "example": "[H3C] bfd session1 bind peer-interface GigabitEthernet1/0/1 source-ip 10.0.0.1 destination-ip 10.0.0.2"},
             "配置检测参数": {"command": "discriminator local <value>\ndiscriminator remote <value>", "description": "配置BFD参数", "example": "[H3C-bfd-session-session1] discriminator local 1\n[H3C-bfd-session-session1] discriminator remote 2"},
             "配置检测时间": {"command": "min-transmit-interval <ms>\nmin-receive-interval <ms>", "description": "配置检测时间间隔", "example": "[H3C-bfd-session-session1] min-transmit-interval 100\n[H3C-bfd-session-session1] min-receive-interval 100"},
-            "查看BFD会话": {"command": "display bfd session", "description": "查看BFD会话", "example": "<H3C> display bfd session"}
+            "查看BFD会话": {"command": "display bfd session", "description": "查看BFD会话", "example": "<H3C> display bfd session"},
+            "BFD Echo模式": {"command": "bfd echo enable", "description": "启用BFD Echo模式（Comware V7特性）", "example": "[H3C] bfd echo enable", "versions": ["v7"]}
         },
         "Track配置": {
             "创建Track项": {"command": "track <track-id> bfd singlehop session <session-name>", "description": "创建Track跟踪BFD", "example": "[H3C] track 1 bfd singlehop session session1"},

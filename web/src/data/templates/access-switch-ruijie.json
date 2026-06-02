@@ -1,0 +1,33 @@
+{
+  "scene": "access-switch",
+  "name": "锐捷接入交换机",
+  "desc": "锐捷RGOS接入层交换机，含VLAN、端口安全、DHCP Snooping、生成树",
+  "vendor": "ruijie",
+  "config": {
+    "basic": {
+      "hostname": "RG-ACC-01",
+      "password": { "value": "Acc@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Office" },
+        { "id": 20, "name": "CCTV" },
+        { "id": 99, "name": "Mgmt" }
+      ]
+    },
+    "security": {
+      "port_security": [
+        { "interface": "GigabitEthernet0/1", "max_mac": 2, "action": "protect" }
+      ],
+      "dhcp_snooping": { "enable": true, "vlan": 10 }
+    },
+    "interface": {
+      "lldp": { "enable": true }
+    }
+  }
+}

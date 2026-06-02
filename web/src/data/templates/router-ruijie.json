@@ -1,0 +1,31 @@
+{
+  "scene": "router",
+  "name": "锐捷出口路由器",
+  "desc": "锐捷RGOS出口路由器，含NAT、默认路由、ACL、管理",
+  "vendor": "ruijie",
+  "config": {
+    "basic": {
+      "hostname": "RG-GW-01",
+      "password": { "value": "Router@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "netcmd-read" }
+    },
+    "routing": {
+      "static_routes": [
+        { "dest": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        { "number": 100, "type": "extended", "description": "WAN-FILTER",
+          "rules": [
+            { "action": "deny", "protocol": "tcp", "source": "any", "destination_port": "23" },
+            { "action": "permit", "protocol": "ip", "source": "192.168.0.0", "source_wildcard": "0.0.255.255" }
+          ]}
+      ]
+    }
+  }
+}

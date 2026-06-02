@@ -12,6 +12,7 @@ from app.engine.adapters.h3c import H3CAdapter
 from app.engine.adapters.huawei import HuaweiAdapter
 from app.engine.adapters.maipu import MaipuAdapter
 from app.engine.adapters.ruijie import RuijieAdapter
+from app.engine.adapters.routeros import RouterOSAdapter
 from app.engine.base import VendorAdapter, VendorNotSupported
 
 # 单例字典；Adapter 都是无状态对象，复用安全
@@ -20,6 +21,7 @@ _ADAPTERS: Dict[str, VendorAdapter] = {
     H3CAdapter.vendor_code: H3CAdapter(),
     RuijieAdapter.vendor_code: RuijieAdapter(),
     MaipuAdapter.vendor_code: MaipuAdapter(),
+    RouterOSAdapter.vendor_code: RouterOSAdapter(),
 }
 
 

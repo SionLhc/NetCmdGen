@@ -1,0 +1,66 @@
+{
+  "scene": "firewall",
+  "name": "防火墙 NAT Server 映射",
+  "desc": "NAT Server发布内网服务(80/443/3389)，NAT Outbound上网，ALG开启FTP/SIP，IP黑名单",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "FW-GW-01",
+      "password": { "value": "FwNAT@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "fw-readonly" }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 1, "name": "Trust" },
+        { "id": 100, "name": "Untrust" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 1, "ip_address": "192.168.1.254", "mask": "255.255.255.0" },
+        { "vlan_id": 100, "ip_address": "198.51.100.2", "mask": "255.255.255.248" }
+      ]
+    },
+    "routing": {
+      "static_routes": [
+        { "dest_network": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "198.51.100.1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 2000,
+          "description": "NAT-Outbound",
+          "rules": [
+            { "action": "permit", "protocol": "ip", "source": "192.168.1.0", "source_wildcard": "0.0.0.255" }
+          ]
+        },
+        {
+          "number": 3000,
+          "description": "NAT-Server入口策略",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "dest_port": "80" },
+            { "action": "permit", "protocol": "tcp", "dest_port": "443" },
+            { "action": "permit", "protocol": "tcp", "dest_port": "3389" }
+          ]
+        }
+      ],
+      "nat": {
+        "servers": [
+          { "type": "tcp", "global_ip": "198.51.100.2", "global_port": 80, "inside_ip": "192.168.1.10", "inside_port": 80 },
+          { "type": "tcp", "global_ip": "198.51.100.2", "global_port": 443, "inside_ip": "192.168.1.10", "inside_port": 443 },
+          { "type": "tcp", "global_ip": "198.51.100.2", "global_port": 3389, "inside_ip": "192.168.1.20", "inside_port": 3389 }
+        ]
+      },
+      "ip_blocklist": {
+        "enable": true,
+        "ips": ["58.218.199.1", "45.33.32.0/24"]
+      }
+    },
+    "interface": {
+      "lldp": { "enable": false }
+    }
+  }
+}

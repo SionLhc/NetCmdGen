@@ -1,0 +1,50 @@
+{
+  "scene": "router",
+  "name": "小型办公路由器 PPPoE",
+  "desc": "小型企业/SOHO场景，PPPoE拨号上网、NAT Easy-IP、DHCP服务器、端口映射",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "GW-SOHO",
+      "password": { "value": "Soh0@2026", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "admin", "password": "Adm1nP@ss", "level": 15 }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 1, "name": "LAN" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 1, "ip_address": "192.168.0.1", "mask": "255.255.255.0" }
+      ]
+    },
+    "routing": {
+      "static_routes": [
+        { "dest_network": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "Dialer1" }
+      ]
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 2000,
+          "description": "Easy-IP NAT",
+          "rules": [
+            { "action": "permit", "protocol": "ip", "source": "192.168.0.0", "source_wildcard": "0.0.0.255" }
+          ]
+        },
+        {
+          "number": 3000,
+          "description": "端口映射 80/443",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "dest_port": "80" },
+            { "action": "permit", "protocol": "tcp", "dest_port": "443" }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "lldp": { "enable": false }
+    }
+  }
+}

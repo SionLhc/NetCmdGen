@@ -26,7 +26,7 @@
         <el-input v-model="pool.dnsInput" size="small" placeholder="8.8.8.8, 114.114.114.114" @change="onDnsChange(pool)" />
       </el-form-item>
     </div>
-    <el-button size="small" plain @click="dhcpPools.push({name:'',network:'',mask:'255.255.255.0',default_router:'',dns_servers:[],dnsInput:''});emitUpdate()" style="width:100%">+ 添加地址池</el-button>
+    <el-button size="small" type="primary" plain @click="dhcpPools.push({name:'',network:'',mask:'255.255.255.0',default_router:'',dns_servers:[],dnsInput:''});emitUpdate()" style="width:100%">+ 添加地址池</el-button>
 
     <!-- DHCP Snooping -->
     <el-divider content-position="left">DHCP Snooping</el-divider>
@@ -48,7 +48,7 @@
         <el-col :span="4"><el-button text type="danger" @click="dhcpRelay.splice(idx,1);emitUpdate()">✕</el-button></el-col>
       </el-row>
     </div>
-    <el-button size="small" plain @click="dhcpRelay.push({name:'',server_ip:''});emitUpdate()" style="width:100%">+ 添加 Relay</el-button>
+    <el-button size="small" type="primary" plain @click="dhcpRelay.push({name:'',server_ip:''});emitUpdate()" style="width:100%">+ 添加 Relay</el-button>
   </el-form>
 </template>
 

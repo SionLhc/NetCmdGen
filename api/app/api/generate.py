@@ -39,7 +39,7 @@ class GenerateFullRequest(BaseModel):
     )
     vrp_version: str = Field(
         default="v5",
-        description="华为 VRP 版本：v5 / v8 / v300（其他厂商忽略）",
+        description="系统版本：华为 v5/v8/v300, H3C v5/v7, RouterOS v6/v7",
         examples=["v8"],
     )
     topology_context: Optional[Dict[str, Any]] = Field(
@@ -101,9 +101,13 @@ def generate_full(req: GenerateFullRequest) -> GenerateResponse:
         else:
             # 传统方式：使用厂商适配器
             adapter = get_adapter(req.vendor)
-            # 华为适配器支持 VRP 版本参数
+            # 华为/H3C/RouterOS 适配器支持系统版本参数
             if req.vendor == "huawei":
                 output = adapter.generate_full(req.config, vrp_version=req.vrp_version)
+            elif req.vendor == "h3c":
+                output = adapter.generate_full(req.config, comware_version=req.vrp_version)
+            elif req.vendor == "routeros":
+                output = adapter.generate_full(req.config, ros_version=req.vrp_version)
             else:
                 output = adapter.generate_full(req.config)
     except VendorNotSupported as e:

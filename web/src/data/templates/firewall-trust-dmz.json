@@ -1,0 +1,61 @@
+{
+  "scene": "firewall",
+  "name": "防火墙三域安全策略",
+  "desc": "Trust/Untrust/DMZ经典三域划分，域间策略+ACL过滤，服务器NAT映射到DMZ区",
+  "vendor": "huawei",
+  "config": {
+    "basic": {
+      "hostname": "FW-DC-01",
+      "password": { "value": "FwDc@2026!", "encrypted": false },
+      "enable_ssh": true,
+      "ssh_port": 22,
+      "user": { "username": "netadmin", "password": "N3t@dm1n", "level": 15 },
+      "enable_ntp": true,
+      "ntp": { "servers": [{ "ip": "ntp1.aliyun.com" }] },
+      "enable_snmp": true,
+      "snmp": { "version": "v2c", "community_read": "fw-readonly" }
+    },
+    "vlan": {
+      "vlans": [
+        { "id": 10, "name": "Trust-LAN" },
+        { "id": 20, "name": "DMZ" },
+        { "id": 30, "name": "Untrust-WAN" }
+      ],
+      "vlanifs": [
+        { "vlan_id": 10, "ip_address": "10.0.10.1", "mask": "255.255.255.0" },
+        { "vlan_id": 20, "ip_address": "10.0.20.1", "mask": "255.255.255.0" },
+        { "vlan_id": 30, "ip_address": "203.0.113.1", "mask": "255.255.255.248" }
+      ]
+    },
+    "routing": {
+      "static_routes": [
+        { "dest_network": "0.0.0.0", "mask": "0.0.0.0", "next_hop": "203.0.113.6" }
+      ]
+    },
+    "security": {
+      "acls": [
+        {
+          "number": 3000,
+          "description": "Trust-to-Untrust 上网",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "10.0.10.0", "source_wildcard": "0.0.0.255", "dest_port": "80" },
+            { "action": "permit", "protocol": "tcp", "source": "10.0.10.0", "source_wildcard": "0.0.0.255", "dest_port": "443" },
+            { "action": "permit", "protocol": "udp", "source": "10.0.10.0", "source_wildcard": "0.0.0.255", "dest_port": "53" }
+          ]
+        },
+        {
+          "number": 3001,
+          "description": "Untrust-to-DMZ",
+          "rules": [
+            { "action": "permit", "protocol": "tcp", "source": "any", "destination": "10.0.20.10", "dest_port": "80" },
+            { "action": "permit", "protocol": "tcp", "source": "any", "destination": "10.0.20.10", "dest_port": "443" },
+            { "action": "deny", "protocol": "ip", "source": "any", "destination": "10.0.20.0", "source_wildcard": "0.0.0.255" }
+          ]
+        }
+      ]
+    },
+    "interface": {
+      "lldp": { "enable": false }
+    }
+  }
+}

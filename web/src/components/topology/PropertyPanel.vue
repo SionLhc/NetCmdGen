@@ -104,6 +104,7 @@ const currentFormComponent = computed(() => {
     'agg-switch': AggSwitchForm,
     'access-switch': AccessSwitchForm,
     'router': RouterForm,
+    'routeros': RouterForm,   // RouterOS 复用路由器表单
     'firewall': FirewallForm,
   }
   return formMap[type] || DefaultForm
