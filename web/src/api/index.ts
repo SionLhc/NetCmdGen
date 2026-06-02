@@ -120,17 +120,18 @@ export const splitSubnet = (network: string, prefix: number, newPrefix: number) 
 export const rangeToCidr = (start: string, end: string) =>
   api.get('/tools/subnet/range-to-cidr', { params: { start, end } }).then((r) => r.data)
 
+// ─── 网络工具（新版 /net/* API）────────────────────────
 export const doPing = (host: string, count = 4, timeout = 2) =>
-  api.get('/tools/ping', { params: { host, count, timeout } }).then((r) => r.data)
+  api.get('/net/ping', { params: { target: host, count, timeout } }).then((r) => r.data)
 
-export const doPortScan = (host: string, ports = '22,80,443,3389', timeout = 1.0) =>
-  api.get('/tools/portscan', { params: { host, ports, timeout } }).then((r) => r.data)
+export const doPortScan = (host: string, ports: string, timeout = 1.0) =>
+  api.get('/net/portscan', { params: { target: host, ports, timeout } }).then((r) => r.data)
 
 export const doTrace = (host: string, maxHops = 30, timeout = 2) =>
-  api.get('/tools/trace', { params: { host, max_hops: maxHops, timeout } }).then((r) => r.data)
+  api.get('/net/traceroute', { params: { target: host, max_hops: maxHops, timeout } }).then((r) => r.data)
 
 export const doDns = (domain: string, recordType = 'A') =>
-  api.get('/tools/dns', { params: { domain, record_type: recordType } }).then((r) => r.data)
+  api.get('/net/dns', { params: { domain, record_type: recordType } }).then((r) => r.data)
 
 export const doWhois = (domain: string) =>
   api.get('/tools/whois', { params: { domain } }).then((r) => r.data)

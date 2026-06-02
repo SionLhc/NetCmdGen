@@ -132,8 +132,14 @@ class HuaweiAdapter:
         """
         version = VrpVersion(vrp_version) if vrp_version in ("v5", "v8", "v300") else VrpVersion.V5
 
+        # 根据配置内容自动判断设备类型
+        device_type = "路由器" if "wan" in config else "交换机"
+        if any(k in str(config.get('description', '')).lower() for k in ['防火墙', 'firewall']):
+            device_type = "防火墙"
+
         sections = [
-            "#\n# 华为交换机配置脚本 (VRP {})\n#".format(version.value.upper()),
+            f"#\n# 华为{device_type}配置脚本 (VRP {version.value.upper()})\n#",
+            f"# 设备型号: {config.get('device_model', '通用') if device_type == '路由器' else config.get('device_model','通用')}",
             f"# 生成时间: {config.get('description', '')}",
             "#\n",
         ]

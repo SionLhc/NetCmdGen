@@ -18,11 +18,12 @@ class H3CConfigGenerator:
     """H3C华三交换机配置生成器"""
 
     @staticmethod
-    def generate_header(description: str = "H3C Switch Configuration",
-                       version: ComwareVersion = ComwareVersion.V5) -> str:
-        """生成配置头部注释"""
+    def generate_header(description: str = "",
+                       version: ComwareVersion = ComwareVersion.V5,
+                       device_type: str = "交换机") -> str:
+        """生成配置头部注释（自动识别设备类型）"""
         return f"""#
-# H3C华三交换机配置脚本 (Comware {version.value.upper()})
+# H3C华三{device_type}配置脚本 (Comware {version.value.upper()})
 # 描述: {description}
 # 生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
 # 设备品牌: H3C (Huawei-3Com)
@@ -655,11 +656,18 @@ class H3CConfigGenerator:
             config: 完整配置字典
             version: Comware 系统版本
         """
-        sections = []
+        # 根据配置内容自动判断设备类型（用户思维：不让用户手动选）
+        device_type = "路由器" if "wan" in config else "交换机"
+        device_model = config.get("device_model", "")
+        description = config.get("description", "")
+        if device_model:
+            description = f"{description} · 型号: {device_model}"
 
+        sections = []
         sections.append(H3CConfigGenerator.generate_header(
-            config.get("description", "H3C Switch Configuration"),
-            version
+            description,
+            version,
+            device_type
         ))
 
         if config.get("basic"):

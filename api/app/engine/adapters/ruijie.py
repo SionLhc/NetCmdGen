@@ -219,7 +219,8 @@ class RuijieAdapter:
         return fn(self, params)
 
     def generate_full(self, config: Dict[str, Any]) -> str:
-        sections = ["!", "# 锐捷交换机配置脚本", "!"]
+        device_type = "路由器" if "wan" in config else "交换机"
+        sections = ["!", f"# 锐捷{device_type}配置脚本", "!"]
         for key in ("basic", "vlan", "routing", "security", "interface", "service"):
             if key in config:
                 sections.append(self.generate(key, config[key]))

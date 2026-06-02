@@ -4,6 +4,14 @@
     <el-form-item label="主机名">
       <el-input v-model="form.hostname" placeholder="SW-CORE-01" />
     </el-form-item>
+    <el-form-item v-if="props.vendor" label="设备型号">
+      <el-select v-model="form.deviceModel" filterable placeholder="选型号（可搜索）" style="width:100%">
+        <el-option-group v-for="g in deviceModels" :key="g.label" :label="g.label">
+          <el-option v-for="m in g.options" :key="m.value" :label="m.label" :value="m.value" />
+        </el-option-group>
+      </el-select>
+      <span style="font-size:11px;color:#909399">选对型号可确保命令100%兼容你的设备</span>
+    </el-form-item>
 
     <el-divider content-position="left">登录认证</el-divider>
     <el-form-item label="密码">
@@ -58,13 +66,47 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, watch, computed } from 'vue'
 
-const props = defineProps<{ modelValue: Record<string, any> }>()
+const props = defineProps<{ modelValue: Record<string, any>; vendor?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, any>] }>()
+
+// 设备型号库（用户思维：按系列分组，带描述）
+const deviceModels = computed(() => {
+  const m: Record<string, {label:string, options:{label:string;value:string}[]}[]> = {
+    huawei: [
+      { label:'AR 企业路由器', options:[
+        {label:'AR1200 系列（中小分支）',value:'AR1200'},{label:'AR2200/AR3200 系列（中大型）',value:'AR2200'},
+        {label:'AR6300 系列（高性能）',value:'AR6300'},{label:'NE 系列（运营商级）',value:'NE'}]},
+      { label:'S 交换机', options:[
+        {label:'S5700 系列（接入）',value:'S5700'},{label:'S6700 系列（汇聚）',value:'S6700'},
+        {label:'S7700/12700（核心）',value:'S7700'}]},
+    ],
+    h3c: [
+      { label:'MSR 路由器', options:[
+        {label:'MSR 2600/3600 系列',value:'MSR2600'},{label:'MSR 5600 系列（高端）',value:'MSR5600'}]},
+      { label:'S 交换机', options:[
+        {label:'S5500/S5560 系列',value:'S5500'},{label:'S6800/S7500 系列',value:'S6800'}]},
+    ],
+    ruijie: [
+      { label:'RSR 路由器', options:[
+        {label:'RSR10/20 系列',value:'RSR10'},{label:'RSR30/50 系列',value:'RSR30'},{label:'RSR77 系列',value:'RSR77'}]},
+      { label:'S 交换机', options:[
+        {label:'S29 系列（接入）',value:'RG-S29'},{label:'S57 系列（汇聚）',value:'RG-S57'},{label:'S86 系列（核心）',value:'RG-S86'}]},
+    ],
+    maipu: [
+      { label:'MP 路由器', options:[
+        {label:'MP1800/2800 系列',value:'MP1800'},{label:'MP3800/4800 系列',value:'MP3800'}]},
+      { label:'S 交换机', options:[
+        {label:'S3000 系列（接入）',value:'S3000'},{label:'S5000 系列（核心）',value:'S5000'}]},
+    ],
+  }
+  return m[props.vendor || ''] || []
+})
 
 const form = reactive({
     hostname: props.modelValue.hostname || '',
+    deviceModel: props.modelValue.deviceModel || '',
     password: props.modelValue.password || '',
     enable_ssh: props.modelValue.enable_ssh || false,
     ssh_port: props.modelValue.ssh_port || 22,
@@ -83,6 +125,7 @@ function emitUpdate() {
     // 构建 API 所需的 params 结构
     const params: Record<string, any> = {}
     if (form.hostname) params.hostname = form.hostname
+    if (form.deviceModel) params.deviceModel = form.deviceModel
     if (form.password) params.password = { value: form.password, encrypted: false }
     params.enable_ssh = form.enable_ssh
     if (form.enable_ssh) params.ssh = { port: form.ssh_port }

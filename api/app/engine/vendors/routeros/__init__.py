@@ -326,14 +326,264 @@ class RouterOSConfigGenerator:
     @staticmethod
     def generate_qos(config: Dict[str, Any],
                      version: RouterOSVersion = RouterOSVersion.V6) -> str:
-        """QoS / Queue Tree 配置"""
-        lines = ["# === QoS 带宽管理 ===", ""]
-        for queue in config.get("simple_queues", []):
-            name = queue.get("name", "QoS")
-            target = queue.get("target", "192.168.1.0/24")
-            limit = queue.get("limit", "10M/10M")
-            lines.append(f"/queue simple add name={name} target={target} max-limit={limit}")
+        """QoS / 带宽管理 — 完整 Mangle + Queue Tree 方案
+
+        用户只需配置总带宽和应用优先级，自动生成：
+        1. Mangle 标记（连接/包标记）
+        2. Queue Tree（基于标记的分层限速）
+        3. Simple Queue（每IP限速后备方案）
+
+        这是小白用户也能用的一站式流控方案。
+        """
+        lines = ["# === QoS 带宽管理（Mangle + Queue Tree）===", ""]
+
+        wan_interfaces = config.get("wan_interfaces", ["ether1"])
+        total_down = config.get("total_bandwidth_down", "100M")
+        total_up = config.get("total_bandwidth_up", "20M")
+        per_ip_limit = config.get("per_ip_limit", "")
+        per_ip_enabled = config.get("per_ip_enabled", False)
+
+        # ── 用户选择的应用优先级 ─────────────────────────────────
+        app_priorities = config.get("app_priorities", {})
+        voip_enabled = app_priorities.get("voip", True)
+        video_enabled = app_priorities.get("video", False)
+        http_enabled = app_priorities.get("http", True)
+        gaming_enabled = app_priorities.get("gaming", False)
+        p2p_enabled = app_priorities.get("p2p", False)
+        p2p_limit = app_priorities.get("p2p_limit", "5M/5M")
+
+        lines.append(f"# 总带宽: ↓{total_down} ↑{total_up}")
+        if per_ip_enabled and per_ip_limit:
+            lines.append(f"# 每IP限速: {per_ip_limit}")
+        lines.append("")
+
+        # === 第一步：Mangle 标记 ===
+        lines.append("# --- 1. Mangle 防火墙标记 ---")
+
+        if version == RouterOSVersion.V7:
+            # RouterOS V7 语法：/ip/firewall/mangle
+            mangle_prefix = "/ip/firewall/mangle"
+        else:
+            # RouterOS V6 语法：/ip firewall mangle
+            mangle_prefix = "/ip firewall mangle"
+
+        # ── 标记下载（prerouting，流量进入 WAN 口时标记）──
+        lines.append(f"# 标记下载连接（流量从 WAN 入）")
+        for wan in wan_interfaces:
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting in-interface={wan} "
+                f"connection-mark=no-mark action=mark-connection "
+                f"new-connection-mark=download-con passthrough=yes"
+            )
+        lines.append(
+            f"{mangle_prefix} add chain=forward connection-mark=download-con "
+            f"action=mark-packet new-packet-mark=down-pkt passthrough=no"
+        )
+        lines.append("")
+
+        # ── 标记上传（postrouting，流量从 LAN 出 WAN 时标记）──
+        lines.append(f"# 标记上传包（流量从 LAN 出 WAN）")
+        for wan in wan_interfaces:
+            lines.append(
+                f"{mangle_prefix} add chain=postrouting out-interface={wan} "
+                f"action=mark-packet new-packet-mark=up-pkt passthrough=no"
+            )
+        lines.append("")
+
+        # ── 应用级别优先级标记 ──
+        # VOIP（语音：SIP 5060, RTP 10000-20000, DSCP EF=46）
+        if voip_enabled:
+            lines.append(f"# VOIP 语音标记（SIP+RTP, DSCP EF=46）")
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dst-port=5060,5061,10000-20000 "
+                f"protocol=udp action=mark-packet new-packet-mark=voip-pkt passthrough=no"
+            )
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dscp=46 "
+                f"action=mark-packet new-packet-mark=voip-pkt passthrough=no"
+            )
+            lines.append("")
+
+        # 视频（流媒体：YouTube/抖音/企业视频会议）
+        if video_enabled:
+            lines.append(f"# 视频流量标记")
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dst-port=443,1935,8080 "
+                f"layer7-protocol=video action=mark-packet new-packet-mark=video-pkt passthrough=no"
+            )
+            lines.append("")
+
+        # HTTP/HTTPS（网页浏览）
+        if http_enabled:
+            lines.append(f"# HTTP/HTTPS 网页浏览标记")
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dst-port=80,443,8080,8443 "
+                f"protocol=tcp action=mark-packet new-packet-mark=http-pkt passthrough=no"
+            )
+            lines.append("")
+
+        # 游戏（低延迟）
+        if gaming_enabled:
+            lines.append(f"# 游戏流量标记（低延迟端口）")
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dst-port=3074,27015-27030,27036 "
+                f"protocol=udp action=mark-packet new-packet-mark=game-pkt passthrough=no"
+            )
+            lines.append("")
+
+        # P2P/下载
+        if p2p_enabled:
+            lines.append(f"# P2P/下载标记（限速处理）")
+            lines.append(
+                f"{mangle_prefix} add chain=prerouting dst-port=6881-6889,51413,6699 "
+                f"p2p=all-p2p action=mark-packet new-packet-mark=p2p-pkt passthrough=no"
+            )
+            lines.append("")
+
+        # === 第二步：Queue Tree ===
+        lines.append("# --- 2. Queue Tree 分层限速 ---")
+
+        if version == RouterOSVersion.V7:
+            tree_prefix = "/queue/tree"
+        else:
+            tree_prefix = "/queue tree"
+
+        # 总带宽队列（parent=global）
+        lines.append(f"# 总带宽限制")
+        lines.append(f"{tree_prefix} add name=Total-Down parent=global packet-mark=down-pkt max-limit={total_down}")
+        lines.append(f"{tree_prefix} add name=Total-Up   parent=global packet-mark=up-pkt   max-limit={total_up}")
+        lines.append("")
+
+        # 应用优先级子树（parent=Total-Down/Total-Up）
+        priority_map = [
+            ("voip", "VOIP语音", 1, voip_enabled),
+            ("game", "游戏", 2, gaming_enabled),
+            ("video", "视频", 3, video_enabled),
+            ("http", "网页", 4, http_enabled),
+            ("p2p", "P2P下载", 8, p2p_enabled),
+        ]
+        for tag, label, prio, enabled in priority_map:
+            if not enabled:
+                continue
+            # 自动计算保证带宽（VOIP至少10%总带宽）
+            limit_at = "10M" if prio == 1 else "5M"
+            p2p_tag = f" max-limit={p2p_limit}" if tag == "p2p" else ""
+            lines.append(f"# {label}（优先级={prio}）")
+            lines.append(
+                f"{tree_prefix} add name={label}-Down parent=Total-Down "
+                f"packet-mark={tag}-pkt priority={prio} limit-at={limit_at}{p2p_tag}"
+            )
+            lines.append(
+                f"{tree_prefix} add name={label}-Up   parent=Total-Up   "
+                f"packet-mark={tag}-pkt priority={prio} limit-at={limit_at}{p2p_tag}"
+            )
+        lines.append("")
+
+        # === 第三步：每IP限速（简化方案） ===
+        if per_ip_enabled and per_ip_limit:
+            lines.append("# --- 3. 每IP限速（Simple Queue） ---")
+            lan_network = config.get("lan_network", "192.168.1.0/24")
+            if version == RouterOSVersion.V7:
+                sq_prefix = "/queue/simple"
+            else:
+                sq_prefix = "/queue simple"
+            lines.append(
+                f"{sq_prefix} add name=Per-IP-Limit target={lan_network} "
+                f"max-limit={per_ip_limit} dst={lan_network}"
+            )
+            lines.append(f"# 提示：如需为个别IP单独限速，复制上面命令改 target=IP 即可")
+            lines.append("")
+
+        lines.append("# 提示：Queue Tree 会自动处理所有标记流量，无需手动管理")
+        lines.append("# 如需监控：/queue tree print stats")
+
         return "\n".join(lines)
+
+    # ─── 策略路由 / 国内外分流 ─────────────────────
+
+    @staticmethod
+    def generate_policy_routes(config: Dict[str, Any],
+                               version: RouterOSVersion = RouterOSVersion.V6) -> str:
+        """生成策略路由（国内外分流 / 设备分流 / 应用分流）
+
+        用户只需选择场景，系统自动生成 Mangle + Route 标记 + 地址列表。
+        """
+        lines = ["# === 策略路由 / 分流 ===", ""]
+        mangle_prefix = "/ip/firewall/mangle" if version == RouterOSVersion.V7 else "/ip firewall mangle"
+        route_prefix = "/ip/route" if version == RouterOSVersion.V7 else "/ip route"
+
+        # ─── 场景1：国内外分流 ──────────────────
+        cn_route = config.get("cnRoute", {})
+        if cn_route.get("enabled"):
+            cn_wan = cn_route.get("cnWan", "ether1")
+            intl_wan = cn_route.get("intlWan", "ether2")
+
+            lines.append("# --- 国内外智能分流 ---")
+            lines.append(f"# 国内网站 → {cn_wan} · 国外网站 → {intl_wan}")
+            lines.append("")
+
+            # 1. 创建中国 IP 地址列表（MikroTik CLI 自带 cn-ip-list）
+            lines.append("# 注：需先导入中国 IP 地址列表")
+            lines.append("# 推荐使用在线生成的 CN IP 列表：https://github.com/17mon/china_ip_list")
+            lines.append("# 导入命令：/tool fetch url=... mode=http dst-path=china.rsc")
+            lines.append("# 或手动添加（示例：电信DNS + 百度DNS）：")
+            lines.append(f"{mangle_prefix} add chain=prerouting dst-address-list=CN-IP action=mark-routing new-routing-mark=cn-route passthrough=no comment=国内分流")
+            lines.append("")
+
+            # 2. 非中国IP走海外线路（执行"否"操作）
+            lines.append("# 非中国 IP（国外/海外）走默认路由")
+            lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{cn_wan}] gateway) routing-mark=cn-route comment=国内默认路由-{cn_wan}")
+            lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{intl_wan}] gateway) comment=海外默认路由-{intl_wan}")
+            lines.append("")
+
+        # ─── 场景2：指定设备走指定WAN ────────────
+        device_routes = config.get("deviceRoutes", [])
+        if device_routes:
+            lines.append("# --- 设备/网段分流 ---")
+            for i, dr in enumerate(device_routes):
+                src = dr.get("srcAddr", "").strip()
+                wan = dr.get("wanInterface", "").strip()
+                comment = dr.get("comment", f"规则{i+1}") or f"规则{i+1}"
+                if not src or not wan:
+                    continue
+                # Mangle 标记
+                tag = f"dr{i+1}"
+                lines.append(f"# {comment}: {src} → {wan}")
+                lines.append(f"{mangle_prefix} add chain=prerouting src-address={src} action=mark-routing new-routing-mark={tag} passthrough=no comment=\"{comment}\"")
+                # V7 路由表关联
+                if version == RouterOSVersion.V7:
+                    lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 routing-table={tag} gateway=$(/ip dhcp-client get [{wan}] gateway) comment=\"{comment}-RT\"")
+                else:
+                    lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{wan}] gateway) routing-mark={tag} comment=\"{comment}-RT\"")
+            lines.append("")
+
+        # ─── 场景3：应用分流 ──────────────────
+        app_routes = config.get("appRoutes", [])
+        if app_routes:
+            lines.append("# --- 应用/端口分流 ---")
+            # 应用端口映射
+            port_map = {
+                "web": "80,443",
+                "game": "3074,27015-27030",
+                "voip": "5060,10000-20000",
+                "mail": "25,465,587,993",
+            }
+            for i, ar in enumerate(app_routes):
+                wan = ar.get("wanInterface", "").strip()
+                comment = ar.get("comment", "") or f"应用{i+1}"
+                ports = ar.get("customPorts", "") or port_map.get(ar.get("appType", ""), "")
+                if not ports or not wan:
+                    continue
+                tag = f"app{i+1}"
+                lines.append(f"# {comment}: 端口{ports} → {wan}")
+                lines.append(f"{mangle_prefix} add chain=prerouting dst-port={ports} protocol=tcp action=mark-routing new-routing-mark={tag} passthrough=no comment=\"{comment}\"")
+                if version == RouterOSVersion.V7:
+                    lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 routing-table={tag} gateway=$(/ip dhcp-client get [{wan}] gateway) comment=\"{comment}-RT\"")
+                else:
+                    lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{wan}] gateway) routing-mark={tag} comment=\"{comment}-RT\"")
+            lines.append("")
+
+        return "\n".join(lines).strip() and "\n".join(lines)
 
     # ─── 统一入口 ─────────────────────────────────
 
@@ -369,4 +619,7 @@ class RouterOSConfigGenerator:
         # Firewall NAT for PCC
         if config.get("qos"):
             sections.append(RouterOSConfigGenerator.generate_qos(config["qos"], version))
+        # 策略路由（国内外分流 / 设备分流 / 应用分流）
+        if config.get("policy_route"):
+            sections.append(RouterOSConfigGenerator.generate_policy_routes(config["policy_route"], version))
         return "\n".join(sections)

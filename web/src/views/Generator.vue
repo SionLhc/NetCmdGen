@@ -22,11 +22,17 @@
           </el-select>
           <el-divider direction="vertical" />
           <span class="vendor-label">厂商:</span>
-          <el-select v-model="activeVendor" placeholder="选择厂商" size="default" style="width:140px">
+          <el-select v-model="activeVendor" placeholder="选择厂商" size="default" style="width:140px" @change="onVendorChange">
             <el-option v-for="v in vendorStore.vendors" :key="v.code" :label="v.name" :value="v.code" />
           </el-select>
+          <!-- 设备型号选择（华为/华三/锐捷/迈普） -->
+          <el-select v-if="vendorModelOptions.length > 0" v-model="deviceModelSelected" placeholder="设备型号" size="default" style="width:200px" filterable>
+            <el-option-group v-for="g in vendorModelOptions" :key="g.label" :label="g.label">
+              <el-option v-for="m in g.options" :key="m.value" :label="m.label" :value="m.value" />
+            </el-option-group>
+          </el-select>
           <!-- 华为 VRP 版本选择 -->
-          <el-select v-if="activeVendor === 'huawei'" v-model="vrpVersion" size="default" style="width:120px">
+          <el-select v-if="activeVendor === 'huawei'" v-model="vrpVersion" size="default" style="width:110px">
             <el-option label="VRP V5" value="v5" />
             <el-option label="VRP V8" value="v8" />
             <el-option label="VRP V300" value="v300" />
@@ -42,10 +48,10 @@
             <el-option label="RouterOS V7" value="v7" />
           </el-select>
           <el-divider direction="vertical" />
-          <el-dropdown @command="handleLoadTemplate" trigger="click">
+          <el-dropdown @command="handleLoadTemplate" trigger="click" popper-class="tpl-dropdown">
             <el-button size="default" plain>加载模板 <el-icon><ArrowDown /></el-icon></el-button>
             <template #dropdown>
-              <el-dropdown-menu>
+              <el-dropdown-menu style="max-height:360px;overflow-y:auto">
                 <el-dropdown-item v-for="t in allTemplates" :key="t.id" :command="t.id">
                   <div class="template-item"><span class="template-name">{{ t.name }}</span><span class="template-desc">{{ t.desc }}</span></div>
                 </el-dropdown-item>
@@ -72,14 +78,28 @@
           <el-tabs v-if="isRouterOS" v-model="activeFormTab" class="form-tabs">
             <el-tab-pane label="系统设置" name="basic"><RosBasicForm v-model="formBasic" :key="'rosb-'+formKey" /></el-tab-pane>
             <el-tab-pane label="接口/Bridge" name="interface"><RosInterfaceForm v-model="formInterface" :key="'rosi-'+formKey" /></el-tab-pane>
-            <el-tab-pane label="路由/PCC" name="routing"><RosRoutingForm v-model="formRouting" :key="'rosr-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="🔀 多线分流/PCC" name="routing"><RosRoutingForm v-model="formRouting" :key="'rosr-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="🧭 策略路由/分流" name="policyRoute"><RosPolicyRouteForm v-model="formPolicy" :wan-interfaces="rosWanList" :key="'rosp-'+formKey" /></el-tab-pane>
             <el-tab-pane label="防火墙/NAT" name="security"><RosFirewallForm v-model="formSecurity" :key="'rosfw-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="🔧 流控限速/QoS" name="qos"><RosQosForm v-model="formQos" :key="'rosqos-'+formKey" /></el-tab-pane>
           </el-tabs>
           <!-- 路由器专属表单（华为/华三/锐捷/迈普） -->
           <el-tabs v-else-if="isRouterScene" v-model="activeFormTab" class="form-tabs">
-            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :key="'basic-'+formKey" /></el-tab-pane>
-            <el-tab-pane label="WAN 广域网" name="wan">
+            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :vendor="activeVendor" :key="'basic-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="WAN 上网" name="wan">
               <RouterWanForm v-model="formWan" :vendor="activeVendor" :key="'wan-'+formKey" />
+            </el-tab-pane>
+            <el-tab-pane label="DHCP 服务" name="dhcp">
+              <RouterDhcpForm v-model="formDhcp" :key="'dhcp-'+formKey" />
+            </el-tab-pane>
+            <el-tab-pane label="NAT 映射" name="nat">
+              <RouterNatForm v-model="formNat" :key="'nat-'+formKey" />
+            </el-tab-pane>
+            <el-tab-pane label="访问控制" name="acl">
+              <RouterAclForm v-model="formAcl" :key="'acl-'+formKey" />
+            </el-tab-pane>
+            <el-tab-pane label="流控限速" name="qos">
+              <RouterQosForm v-model="formQos" :key="'rqos-'+formKey" />
             </el-tab-pane>
             <el-tab-pane label="路由" name="routing">
               <HuaweiRoutingForm v-if="activeVendor === 'huawei'" v-model="formRouting" :key="'hwr-'+formKey" />
@@ -88,12 +108,10 @@
               <MaipuRoutingForm v-else-if="activeVendor === 'maipu'" v-model="formRouting" :key="'mpr-'+formKey" />
               <RoutingForm v-else v-model="formRouting" :key="'rout-'+formKey" />
             </el-tab-pane>
-            <el-tab-pane label="ACL/防火墙" name="security"><SecurityForm v-model="formSecurity" :key="'sec-'+formKey" /></el-tab-pane>
-            <el-tab-pane label="服务" name="service" v-if="hasService"><ServiceForm v-model="formService" :key="'svc-'+formKey" /></el-tab-pane>
           </el-tabs>
           <!-- 交换机专属表单（华为/华三/锐捷/迈普） -->
           <el-tabs v-else v-model="activeFormTab" class="form-tabs">
-            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :key="'basic-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :vendor="activeVendor" :key="'basic-'+formKey" /></el-tab-pane>
             <el-tab-pane label="VLAN" name="vlan"><VlanForm v-model="formVlan" :key="'vlan-'+formKey" /></el-tab-pane>
             <el-tab-pane label="路由" name="routing">
               <HuaweiRoutingForm v-if="activeVendor === 'huawei'" v-model="formRouting" :key="'hwr-'+formKey" />
@@ -223,11 +241,17 @@ import RosFirewallForm from '@/components/generator/RosFirewallForm.vue'
 import RosBasicForm from '@/components/generator/RosBasicForm.vue'
 import RosInterfaceForm from '@/components/generator/RosInterfaceForm.vue'
 import RosRoutingForm from '@/components/generator/RosRoutingForm.vue'
+import RosQosForm from '@/components/generator/RosQosForm.vue'
+import RosPolicyRouteForm from '@/components/generator/RosPolicyRouteForm.vue'
 import HuaweiRoutingForm from '@/components/generator/HuaweiRoutingForm.vue'
 import H3cRoutingForm from '@/components/generator/H3cRoutingForm.vue'
 import RuijieRoutingForm from '@/components/generator/RuijieRoutingForm.vue'
 import MaipuRoutingForm from '@/components/generator/MaipuRoutingForm.vue'
 import RouterWanForm from '@/components/generator/RouterWanForm.vue'
+import RouterDhcpForm from '@/components/generator/RouterDhcpForm.vue'
+import RouterNatForm from '@/components/generator/RouterNatForm.vue'
+import RouterAclForm from '@/components/generator/RouterAclForm.vue'
+import RouterQosForm from '@/components/generator/RouterQosForm.vue'
 
 const vendorStore = useVendorStore()
 const topoStore = useTopologyStore()
@@ -248,7 +272,50 @@ const sceneList: SceneDef[] = [
 const scene = ref('core-switch')
 const activeVendor = ref('')
 const vrpVersion = ref<'v5'|'v8'|'v300'|'v7'|'v6'>('v8')
-const activeFormTab = ref('basic')
+const deviceModelSelected = ref('')
+
+/** 按厂商和场景动态返回型号选项 */
+const vendorModelOptions = computed(() => {
+  if (!activeVendor.value || activeVendor.value === 'routeros') return []
+  const sceneId = scene.value
+  const isRouter = sceneId === 'router'
+  const isFirewall = sceneId === 'firewall'
+
+  // 交换机型号
+  const switchModels: Record<string, {label:string,value:string}[]> = {
+    huawei: [{label:'S5700 系列（接入层）',value:'S5700'},{label:'S6700 系列（汇聚层）',value:'S6700'},{label:'S7700/S12700 系列（核心层）',value:'S7700'}],
+    h3c: [{label:'S5500/S5560 系列',value:'S5500'},{label:'S6800/S7500 系列',value:'S6800'}],
+    ruijie: [{label:'RG-S29 系列（接入）',value:'RG-S29'},{label:'RG-S57 系列（汇聚）',value:'RG-S57'},{label:'RG-S86 系列（核心）',value:'RG-S86'}],
+    maipu: [{label:'S3000 系列（接入）',value:'S3000'},{label:'S5000 系列（核心）',value:'S5000'}],
+  }
+  // 路由器型号
+  const routerModels: Record<string, {label:string,value:string}[]> = {
+    huawei: [{label:'AR1200 系列（小型分支）',value:'AR1200'},{label:'AR2200/AR3200 系列（推荐★）',value:'AR2200'},{label:'AR6300 系列（高性能）',value:'AR6300'}],
+    h3c: [{label:'MSR 2600/3600 系列',value:'MSR2600'},{label:'MSR 5600 系列（推荐★）',value:'MSR5600'}],
+    ruijie: [{label:'RSR10/20 系列',value:'RSR10'},{label:'RSR30/50 系列（推荐★）',value:'RSR30'},{label:'RSR77 系列',value:'RSR77'}],
+    maipu: [{label:'MP1800/2800 系列',value:'MP1800'},{label:'MP3800/4800 系列（推荐★）',value:'MP3800'}],
+  }
+  // 防火墙型号
+  const fwModels: Record<string, {label:string,value:string}[]> = {
+    huawei: [{label:'USG6000 系列',value:'USG6000'},{label:'USG6600 系列',value:'USG6600'}],
+    h3c: [{label:'F1000 系列',value:'F1000'},{label:'F5000 系列',value:'F5000'}],
+    ruijie: [{label:'RG-WALL 1600 系列',value:'RG-WALL1600'},{label:'RG-WALL 2000 系列',value:'RG-WALL2000'}],
+    maipu: [{label:'FW1000 系列',value:'FW1000'},{label:'FW3000 系列',value:'FW3000'}],
+  }
+
+  const vendor = activeVendor.value
+  if (isRouter && routerModels[vendor]) return [{label:'路由器系列', options: routerModels[vendor]}]
+  if (isFirewall && fwModels[vendor]) return [{label:'防火墙系列', options: fwModels[vendor]}]
+  if (switchModels[vendor]) return [{label:'交换机系列', options: switchModels[vendor]}]
+  return []
+})
+
+/** 切换厂商时自动重置版本号 */
+function onVendorChange() {
+  const defaults: Record<string, string> = { huawei:'v8', h3c:'v7', ruijie:'v5', maipu:'v5', routeros:'v7' }
+  vrpVersion.value = (defaults[activeVendor.value] || 'v5') as any
+  deviceModelSelected.value = ''
+}
 const activeOutputTab = ref('0')
 const showDiff = ref(false)
 const generating = ref(false)
@@ -260,12 +327,26 @@ const formRouting = ref<Record<string,any>>({})
 const formSecurity = ref<Record<string,any>>({})
 const formInterface = ref<Record<string,any>>({})
 const formWan = ref<Record<string,any>>({})
+const formDhcp = ref<Record<string,any>>({})
+const formNat = ref<Record<string,any>>({})
+const formAcl = ref<Record<string,any>>({})
 const formQos = ref<Record<string,any>>({})
+const formPolicy = ref<Record<string,any>>({})
 const formService = ref<Record<string,any>>({})
 
 const hasService = computed(() => sceneList.find(x => x.id === scene.value)?.features.includes('service') ?? false)
 const isRouterOS = computed(() => activeVendor.value === 'routeros')
 const isRouterScene = computed(() => ['router','firewall'].includes(scene.value))
+
+/** 从接口表单提取 WAN 口名称列表（供策略路由选择） */
+const rosWanList = computed(() => {
+  const interfaces = formInterface.value
+  if (!interfaces || !Array.isArray((interfaces as any)?.interfaces)) return ['ether1', 'ether2', 'ether3']
+  const wanPorts = (interfaces as any).interfaces
+    .filter((i: any) => i.role === 'wan' || i.name?.startsWith('ether'))
+    .map((i: any) => i.name)
+  return wanPorts.length > 0 ? wanPorts : ['ether1', 'ether2', 'ether3']
+})
 
 interface OutputItem { vendor: string; vendorName: string; output: string; lines: number }
 const allOutputs = ref<OutputItem[]>([])
@@ -275,12 +356,24 @@ onMounted(() => vendorStore.loadVendors())
 function onSceneChange() { activeFormTab.value = 'basic'; allOutputs.value = [] }
 
 function buildFullConfig(): Record<string, any> {
-  const cfg: Record<string, any> = { description: `场景: ${sceneList.find(x=>x.id===scene.value)?.name||''}`,
+  const sceneName = sceneList.find(x=>x.id===scene.value)?.name||''
+  // 设备型号优先：工具栏选择的 → WAN 表单 → BasicForm
+  const deviceModel = deviceModelSelected.value || (formWan.value as any)?.device_model || (formBasic.value as any)?.deviceModel || ''
+  const cfg: Record<string, any> = {
+    description: `场景: ${sceneName}${deviceModel ? ' · 型号: ' + deviceModel : ''}`,
+    device_model: deviceModel,
+    device_type: isRouterScene.value ? 'router' : scene.value.includes('firewall') ? 'firewall' : 'switch',
     basic: {...formBasic.value}, routing: {...formRouting.value},
     security: {...formSecurity.value}, interface: {...formInterface.value},
     service: {...formService.value} }
-  if (isRouterScene.value) { cfg.wan = {...formWan.value} }
-  else { cfg.vlan = {...formVlan.value}; cfg.qos = {...formQos.value} }
+  if (isRouterScene.value) {
+    cfg.wan = {...formWan.value}
+    cfg.dhcp = {...formDhcp.value}
+    cfg.nat = {...formNat.value}
+    cfg.acl = {...formAcl.value}
+    cfg.qos = {...formQos.value}
+    cfg.policy_route = {...formPolicy.value}
+  } else { cfg.vlan = {...formVlan.value}; cfg.qos = {...formQos.value} }
   return cfg
 }
 
@@ -322,7 +415,7 @@ async function onCompareAll() {
 
 function onCopyAll() { const idx = Number(activeOutputTab.value); const out = allOutputs.value[idx]; if (out) { navigator.clipboard.writeText(out.output); ElMessage.success('已复制') } }
 function copyOne(text: string) { navigator.clipboard.writeText(text); ElMessage.success('已复制') }
-function onClear() { allOutputs.value = []; Object.keys({formBasic,formVlan,formRouting,formSecurity,formInterface,formQos,formService}).forEach(k => (eval(k).value = {})); showDiff.value = false }
+function onClear() { allOutputs.value = []; Object.keys({formBasic,formVlan,formWan,formDhcp,formNat,formAcl,formPolicy,formRouting,formSecurity,formInterface,formQos,formService}).forEach(k => (eval(k).value = {})); showDiff.value = false }
 function formatDiff(output: string): string { return output.split('\n').map((line,i)=>`${String(i+1).padStart(4,' ')}  ${line}`).join('\n') }
 
 /** 计算行级 diff：相同行绿色、差异行黄色、仅此厂商有蓝色 */
