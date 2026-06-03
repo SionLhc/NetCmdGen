@@ -585,5 +585,26 @@ class SecurityConfigGenerator:
                 ipsg_conf.get("vlans"),
                 ipsg_conf.get("trusted_ports")
             ))
+
+        if "dot1x" in config:
+            dot1x = config["dot1x"]
+            config_lines.append("\n#\n# 802.1X认证\n#\n")
+            config_lines.append("dot1x enable")
+            config_lines.append(f"dot1x authentication-method {dot1x.get('method','eap')}")
+            for port in (dot1x.get("ports") or []):
+                config_lines.append(f"interface {port}")
+                config_lines.append(" dot1x enable")
+                config_lines.append(" dot1x port-control auto")
+                config_lines.append("#")
+
+        if config.get("port_isolation"):
+            pi = config["port_isolation"]
+            config_lines.append("\n#\n# 端口隔离\n#\n")
+            for port in (pi.get("ports") or []):
+                config_lines.append(f"interface {port}")
+                config_lines.append(" port-isolate enable")
+                config_lines.append("#")
+            if pi.get("group_id"):
+                config_lines.append(f"port-isolate group {pi['group_id']}")
         
         return "".join(config_lines)

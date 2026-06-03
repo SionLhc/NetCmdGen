@@ -43,6 +43,22 @@ class H3CAdapter:
 
     def generate_full(self, config: Dict[str, Any],
                       comware_version: str = "v5") -> str:
-        """生成完整配置，支持 Comware V5/V7 版本区分。"""
+        """生成完整配置，支持 Comware V5/V7 版本区分。
+
+        前端可能发送 dhcp / nat / acl 等独立 key，
+        这些字段通过在此处合并到对应模块后，由 generate_all 统一处理。
+        """
         version = ComwareVersion(comware_version) if comware_version in ("v5", "v7") else ComwareVersion.V5
+
+        # 前端 route 场景发送了 dhcp/nat/acl 作为独立 key，合并到已有模块
+        if "dhcp" in config and not config.get("wan", {}).get("dhcp_enabled"):
+            config.setdefault("wan", {})["dhcp_enabled"] = True
+            config.setdefault("wan", {})["dhcp_server"] = config["dhcp"]
+
+        if "nat" in config and not config.get("wan", {}).get("nat_rules"):
+            config.setdefault("wan", {})["nat_rules"] = config.get("nat", {}).get("rules", [])
+
+        if "acl" in config and not config.get("security", {}).get("acl_rules"):
+            config.setdefault("security", {})["acl_rules"] = config.get("acl", {}).get("rules", [])
+
         return H3CConfigGenerator.generate_all(config, version)

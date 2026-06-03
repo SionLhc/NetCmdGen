@@ -31,14 +31,14 @@
               <el-option v-for="m in g.options" :key="m.value" :label="m.label" :value="m.value" />
             </el-option-group>
           </el-select>
-          <!-- 华为 VRP 版本选择 -->
-          <el-select v-if="activeVendor === 'huawei'" v-model="vrpVersion" size="default" style="width:110px">
+          <!-- 华为 VRP 版本 -->
+          <el-select v-if="activeVendor === 'huawei'" v-model="vrpVersion" size="default" style="width:110px" :disabled="!!deviceModelSelected">
             <el-option label="VRP V5" value="v5" />
             <el-option label="VRP V8" value="v8" />
             <el-option label="VRP V300" value="v300" />
           </el-select>
-          <!-- 华三 Comware 版本选择 -->
-          <el-select v-if="activeVendor === 'h3c'" v-model="vrpVersion" size="default" style="width:130px">
+          <!-- 华三 Comware 版本 -->
+          <el-select v-if="activeVendor === 'h3c'" v-model="vrpVersion" size="default" style="width:130px" :disabled="!!deviceModelSelected">
             <el-option label="Comware V5" value="v5" />
             <el-option label="Comware V7" value="v7" />
           </el-select>
@@ -65,8 +65,19 @@
           <el-button type="primary" size="default" @click="onGenerateAll" :loading="generating" :disabled="!activeVendor">生成完整命令</el-button>
           <el-button size="default" @click="onCompareAll" :loading="generating">对比全部厂商</el-button>
           <el-button @click="onCopyAll" :disabled="allOutputs.length===0" size="default">复制</el-button>
-          <el-button @click="handleExport" :disabled="allOutputs.length===0" size="default">导出 .cfg</el-button>
-          <el-button @click="handleExportExcel" :disabled="allOutputs.length===0" size="default">导出 Excel</el-button>
+          <el-dropdown @command="handleExport" :disabled="allOutputs.length===0" style="margin-left:0">
+            <el-button size="default" :disabled="allOutputs.length===0">导出 ▼</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="cfg">📄 导出 .cfg（当前厂商）</el-dropdown-item>
+                <el-dropdown-item command="txt">📝 导出 .txt（纯文本）</el-dropdown-item>
+                <el-dropdown-item command="md">📋 导出 Markdown（所有厂商）</el-dropdown-item>
+                <el-dropdown-item command="cfg-all">📦 导出全部 .cfg</el-dropdown-item>
+                <el-dropdown-item command="excel" divided>📊 导出 Excel 对比表</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button @click="sshVisible = true" size="default" :disabled="allOutputs.length===0">SSH下发</el-button>
           <el-button @click="onClear" size="default">清空</el-button>
         </div>
       </div>
@@ -78,10 +89,18 @@
           <el-tabs v-if="isRouterOS" v-model="activeFormTab" class="form-tabs">
             <el-tab-pane label="系统设置" name="basic"><RosBasicForm v-model="formBasic" :key="'rosb-'+formKey" /></el-tab-pane>
             <el-tab-pane label="接口/Bridge" name="interface"><RosInterfaceForm v-model="formInterface" :key="'rosi-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="DHCP 服务" name="dhcp"><RosDhcpForm v-model="formDhcp" :key="'rosdhcp-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="NAT/端口映射" name="nat"><RosNatForm v-model="formNat" :key="'rosnat-'+formKey" /></el-tab-pane>
             <el-tab-pane label="🔀 多线分流/PCC" name="routing"><RosRoutingForm v-model="formRouting" :key="'rosr-'+formKey" /></el-tab-pane>
             <el-tab-pane label="🧭 策略路由/分流" name="policyRoute"><RosPolicyRouteForm v-model="formPolicy" :wan-interfaces="rosWanList" :key="'rosp-'+formKey" /></el-tab-pane>
             <el-tab-pane label="防火墙/NAT" name="security"><RosFirewallForm v-model="formSecurity" :key="'rosfw-'+formKey" /></el-tab-pane>
             <el-tab-pane label="🔧 流控限速/QoS" name="qos"><RosQosForm v-model="formQos" :key="'rosqos-'+formKey" /></el-tab-pane>
+          </el-tabs>
+          <!-- 防火墙专属表单 -->
+          <el-tabs v-else-if="isFirewallScene" v-model="activeFormTab" class="form-tabs">
+            <el-tab-pane label="基础配置" name="basic"><BasicForm v-model="formBasic" :vendor="activeVendor" :key="'basic-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="WAN 广域网" name="wan"><RouterWanForm v-model="formWan" :vendor="activeVendor" :key="'wan-'+formKey" /></el-tab-pane>
+            <el-tab-pane label="防火墙策略" name="firewall"><FirewallForm v-model="formFirewall" :vendor="activeVendor" :key="'fw-'+formKey" /></el-tab-pane>
           </el-tabs>
           <!-- 路由器专属表单（华为/华三/锐捷/迈普） -->
           <el-tabs v-else-if="isRouterScene" v-model="activeFormTab" class="form-tabs">
@@ -203,6 +222,29 @@
       </template>
     </el-dialog>
 
+    <!-- SSH 下发对话框 -->
+    <el-dialog v-model="sshVisible" title="SSH 配置下发" width="500px" top="10vh">
+      <el-form label-width="80px" size="small">
+        <el-form-item label="设备IP"><el-input v-model="sshHost" placeholder="192.168.1.1"/></el-form-item>
+        <el-form-item label="用户名"><el-input v-model="sshUser" placeholder="admin"/></el-form-item>
+        <el-form-item label="密码"><el-input v-model="sshPwd" type="password" placeholder="输入SSH密码" show-password/></el-form-item>
+        <el-form-item label="端口"><el-input-number v-model="sshPort" :min="1" :max="65535"/></el-form-item>
+      </el-form>
+      <div v-if="sshResult" style="margin-top:8px;max-height:200px;overflow:auto">
+        <div v-if="sshResult.success">
+          <div v-for="(r,i) in sshResult.results" :key="i" style="margin-bottom:4px;font-size:12px">
+            <el-tag :type="r.status==='error'?'danger':'success'" size="small" style="margin-right:4px">$ {{ r.command }}</el-tag>
+            <pre style="margin:2px 0 0;font-size:11px;color:#64748b">{{ r.output }}</pre>
+          </div>
+        </div>
+        <el-alert v-else :title="sshResult.error" type="error" :closable="false"/>
+      </div>
+      <template #footer>
+        <el-button @click="sshVisible=false">关闭</el-button>
+        <el-button type="primary" @click="onSshExec" :loading="sshRunning" :disabled="!sshHost||!sshPwd">执行下发</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 从拓扑导入对话框 -->
     <el-dialog v-model="topoImportVisible" title="从拓扑导入设备" width="700px">
       <el-table :data="topoStore.exportedDevices" size="small" highlight-current-row @row-click="onTopoDeviceClick">
@@ -220,13 +262,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useVendorStore } from '@/stores/vendor'
 import { useTopologyStore, type TopologyDevice } from '@/stores/topology'
 import { ArrowDown } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { generateFull as apiGenerateFull } from '@/api'
+import api from '@/api'
 import { getAllTemplates, getTemplateById } from '@/data/templates'
 import { validateBeforeGenerate, showValidationResult } from '@/utils/validator'
 import ProjectView from '@/components/generator/ProjectView.vue'
@@ -243,11 +286,14 @@ import RosInterfaceForm from '@/components/generator/RosInterfaceForm.vue'
 import RosRoutingForm from '@/components/generator/RosRoutingForm.vue'
 import RosQosForm from '@/components/generator/RosQosForm.vue'
 import RosPolicyRouteForm from '@/components/generator/RosPolicyRouteForm.vue'
+import RosDhcpForm from '@/components/generator/RosDhcpForm.vue'
+import RosNatForm from '@/components/generator/RosNatForm.vue'
 import HuaweiRoutingForm from '@/components/generator/HuaweiRoutingForm.vue'
 import H3cRoutingForm from '@/components/generator/H3cRoutingForm.vue'
 import RuijieRoutingForm from '@/components/generator/RuijieRoutingForm.vue'
 import MaipuRoutingForm from '@/components/generator/MaipuRoutingForm.vue'
 import RouterWanForm from '@/components/generator/RouterWanForm.vue'
+import FirewallForm from '@/components/generator/FirewallForm.vue'
 import RouterDhcpForm from '@/components/generator/RouterDhcpForm.vue'
 import RouterNatForm from '@/components/generator/RouterNatForm.vue'
 import RouterAclForm from '@/components/generator/RouterAclForm.vue'
@@ -256,17 +302,18 @@ import RouterQosForm from '@/components/generator/RouterQosForm.vue'
 const vendorStore = useVendorStore()
 const topoStore = useTopologyStore()
 const activeTab = ref<'config' | 'project'>('config')
+const activeFormTab = ref('basic')
 
 interface SceneDef { id: string; name: string; desc: string; features: string[] }
 const sceneList: SceneDef[] = [
-  // ── 交换机 ──
-  { id: 'core-switch', name: '核心交换机', desc: '园区/数据中心核心层', features: ['basic','vlan','routing','security','interface','qos','service'] },
-  { id: 'agg-switch', name: '汇聚交换机', desc: '园区汇聚层', features: ['basic','vlan','routing','security','interface','service'] },
-  { id: 'access-switch', name: '接入交换机', desc: '终端接入层', features: ['basic','vlan','security','interface','service'] },
-  // ── 路由器 ──
-  { id: 'router', name: '🛣 出口路由器', desc: '多线接入/负载均衡/NAT', features: ['basic','wan','routing','security','interface','service'] },
-  // ── 防火墙 ──
-  { id: 'firewall', name: '🛡 防火墙', desc: '安全策略/入侵防御/DMZ', features: ['basic','wan','routing','security','interface','service'] },
+  // ── 交换机（核心/汇聚/接入）──
+  { id: 'core-switch', name: '核心交换机', desc: 'CLI 命令行配置', features: ['basic','vlan','stp','lacp','routing','acl','qos','snmp','log','mirror','stack'] },
+  { id: 'agg-switch', name: '汇聚交换机', desc: 'CLI 命令行配置', features: ['basic','vlan','stp','lacp','routing','acl','snmp','log','mirror'] },
+  { id: 'access-switch', name: '接入交换机', desc: 'CLI 命令行配置', features: ['basic','vlan','stp','portsec','acl','snmp','log'] },
+  // ── 出口路由器（仅 CLI）──
+  { id: 'router', name: '🛣 出口路由器', desc: 'CLI 命令行配置', features: ['basic','wan','routing','multilan','acl','nat','dhcp','flow'] },
+  // ── 防火墙（仅 CLI 型号）──
+  { id: 'firewall', name: '🛡 防火墙', desc: 'CLI 命令行配置', features: ['basic','zone','policy','nat','acl','vpn','session','log'] },
 ]
 
 const scene = ref('core-switch')
@@ -288,12 +335,12 @@ const vendorModelOptions = computed(() => {
     ruijie: [{label:'RG-S29 系列（接入）',value:'RG-S29'},{label:'RG-S57 系列（汇聚）',value:'RG-S57'},{label:'RG-S86 系列（核心）',value:'RG-S86'}],
     maipu: [{label:'S3000 系列（接入）',value:'S3000'},{label:'S5000 系列（核心）',value:'S5000'}],
   }
-  // 路由器型号
+  // 路由器型号（仅 CLI 管理型号，非 CLI 的直接不展示）
   const routerModels: Record<string, {label:string,value:string}[]> = {
-    huawei: [{label:'AR1200 系列（小型分支）',value:'AR1200'},{label:'AR2200/AR3200 系列（推荐★）',value:'AR2200'},{label:'AR6300 系列（高性能）',value:'AR6300'}],
+    huawei: [{label:'AR2200/AR3200 系列（推荐★）',value:'AR2200'},{label:'AR6300 系列（高性能）',value:'AR6300'}],
     h3c: [{label:'MSR 2600/3600 系列',value:'MSR2600'},{label:'MSR 5600 系列（推荐★）',value:'MSR5600'}],
-    ruijie: [{label:'RSR10/20 系列',value:'RSR10'},{label:'RSR30/50 系列（推荐★）',value:'RSR30'},{label:'RSR77 系列',value:'RSR77'}],
-    maipu: [{label:'MP1800/2800 系列',value:'MP1800'},{label:'MP3800/4800 系列（推荐★）',value:'MP3800'}],
+    ruijie: [{label:'RSR30/50 系列（推荐★）',value:'RSR30'},{label:'RSR77 系列',value:'RSR77'}],
+    maipu: [{label:'MP3800/4800 系列（推荐★）',value:'MP3800'}],
   }
   // 防火墙型号
   const fwModels: Record<string, {label:string,value:string}[]> = {
@@ -316,6 +363,24 @@ function onVendorChange() {
   vrpVersion.value = (defaults[activeVendor.value] || 'v5') as any
   deviceModelSelected.value = ''
 }
+
+/** 型号→版本映射：选型号后自动锁定对应VRP版本 */
+const modelToVrp: Record<string, string> = {
+  // 华为交换机
+  S5700:'v8', S6700:'v8', S7700:'v300',
+  // 华三交换机
+  S5500:'v5', S6800:'v7',
+  // 华为路由器
+  AR2200:'v8', AR6300:'v300',
+  // 华三路由器
+  MSR2600:'v7', MSR5600:'v7',
+}
+
+watch(deviceModelSelected, (model) => {
+  if (model && modelToVrp[model]) {
+    vrpVersion.value = modelToVrp[model] as any
+  }
+})
 const activeOutputTab = ref('0')
 const showDiff = ref(false)
 const generating = ref(false)
@@ -329,6 +394,7 @@ const formInterface = ref<Record<string,any>>({})
 const formWan = ref<Record<string,any>>({})
 const formDhcp = ref<Record<string,any>>({})
 const formNat = ref<Record<string,any>>({})
+const formFirewall = ref<Record<string,any>>({})
 const formAcl = ref<Record<string,any>>({})
 const formQos = ref<Record<string,any>>({})
 const formPolicy = ref<Record<string,any>>({})
@@ -336,7 +402,8 @@ const formService = ref<Record<string,any>>({})
 
 const hasService = computed(() => sceneList.find(x => x.id === scene.value)?.features.includes('service') ?? false)
 const isRouterOS = computed(() => activeVendor.value === 'routeros')
-const isRouterScene = computed(() => ['router','firewall'].includes(scene.value))
+const isRouterScene = computed(() => ['router'].includes(scene.value))
+const isFirewallScene = computed(() => scene.value === 'firewall')
 
 /** 从接口表单提取 WAN 口名称列表（供策略路由选择） */
 const rosWanList = computed(() => {
@@ -357,8 +424,8 @@ function onSceneChange() { activeFormTab.value = 'basic'; allOutputs.value = [] 
 
 function buildFullConfig(): Record<string, any> {
   const sceneName = sceneList.find(x=>x.id===scene.value)?.name||''
-  // 设备型号优先：工具栏选择的 → WAN 表单 → BasicForm
-  const deviceModel = deviceModelSelected.value || (formWan.value as any)?.device_model || (formBasic.value as any)?.deviceModel || ''
+  // 型号统一取自工具栏下拉
+  const deviceModel = deviceModelSelected.value || (formBasic.value as any)?.deviceModel || ''
   const cfg: Record<string, any> = {
     description: `场景: ${sceneName}${deviceModel ? ' · 型号: ' + deviceModel : ''}`,
     device_model: deviceModel,
@@ -373,8 +440,32 @@ function buildFullConfig(): Record<string, any> {
     cfg.acl = {...formAcl.value}
     cfg.qos = {...formQos.value}
     cfg.policy_route = {...formPolicy.value}
+  } else if (isFirewallScene.value) {
+    cfg.wan = {...formWan.value}
+    cfg.firewall = {...formFirewall.value}
   } else { cfg.vlan = {...formVlan.value}; cfg.qos = {...formQos.value} }
   return cfg
+}
+
+/** 将后端报错转为用户能看懂的中文提示 */
+function friendlyError(e: any): string {
+  const raw = e.response?.data?.detail || e.message || String(e)
+  // 常见后端报错 → 中文
+  const map: Record<string, string> = {
+    'FeatureNotSupported': '该厂商不支持此特性，请尝试其他配置方案',
+    'KeyError': '缺少必填参数，请检查表单是否填写完整',
+    'ValidationError': '参数格式不正确，请检查输入值',
+    'timeout': '后端处理超时（可能是网络问题或配置过于复杂），请重试',
+    'connect': '无法连接到后端服务，请确认服务已启动',
+    'Network Error': '网络连接失败，请检查后端服务是否正常运行',
+    '500': '服务器内部错误，请稍后重试',
+    '404': '请求的资源不存在',
+    '422': '输入参数校验未通过，请检查表单填写',
+  }
+  for (const [key, msg] of Object.entries(map)) {
+    if (raw.includes(key)) return `${msg}（${raw.slice(0, 80)}）`
+  }
+  return raw.length > 120 ? raw.slice(0, 120) + '...' : raw
 }
 
 async function onGenerateAll() {
@@ -390,7 +481,8 @@ async function onGenerateAll() {
     const res = await apiGenerateFull({ vendor: activeVendor.value, config, vrp_version: vrp })
     allOutputs.value.push({ vendor: activeVendor.value, vendorName: vObj?.name || activeVendor.value, output: res.output, lines: res.output.split('\n').length })
   } catch (e: any) {
-    allOutputs.value.push({ vendor: activeVendor.value, vendorName: vObj?.name || activeVendor.value, output: `# 生成失败: ${e.response?.data?.detail||e.message}`, lines: 1 })
+    const errMsg = friendlyError(e)
+    allOutputs.value.push({ vendor: activeVendor.value, vendorName: vObj?.name || activeVendor.value, output: `# 生成失败: ${errMsg}`, lines: 1 })
   }
   generating.value = false; activeOutputTab.value = '0'
   ElMessage.success('生成完成')
@@ -407,7 +499,7 @@ async function onCompareAll() {
       const vrp = ['huawei','h3c','routeros'].includes(v.code) ? vrpVersion.value : undefined
       const res = await apiGenerateFull({ vendor: v.code, config, vrp_version: vrp })
       allOutputs.value.push({ vendor: v.code, vendorName: v.name, output: res.output, lines: res.output.split('\n').length })
-    } catch (e: any) { allOutputs.value.push({ vendor: v.code, vendorName: v.name, output: `# 失败: ${(e as Error).message}`, lines: 1 }) }
+    } catch (e: any) { allOutputs.value.push({ vendor: v.code, vendorName: v.name, output: `# 失败: ${friendlyError(e)}`, lines: 1 }) }
   }
   generating.value = false; activeOutputTab.value = '0'; showDiff.value = true
   ElMessage.success(`已对比 ${allOutputs.value.length} 个厂商`)
@@ -460,20 +552,64 @@ function handleLoadTemplate(id: string) {
   formKey.value++; ElMessage.success(`已加载模板: ${tpl.name}`)
 }
 
-// 导出 .cfg
-function handleExport() {
-  const out = allOutputs.value[Number(activeOutputTab.value)]; if (!out) return
-  const sname = sceneList.find(s=>s.id===scene.value)?.name||'device'
-  const fname = `${formBasic.value.hostname||'NetCmdGen'}_${sname}_${out.vendor}.cfg`.replace(/\s+/g,'_')
-  const b = new Blob([out.output],{type:'text/plain;charset=utf-8'}); const u = URL.createObjectURL(b)
-  const a = document.createElement('a'); a.href=u; a.download=fname; a.click(); URL.revokeObjectURL(u)
-  ElMessage.success(`已导出: ${fname}`)
+// 导出（支持 cfg / txt / md / cfg-all / excel） 
+function handleExport(command: string) {
+  if (command === 'excel') { handleExportExcel(); return }
+  const hostname = (formBasic.value.hostname || 'NetCmdGen').replace(/\s+/g, '_')
+  const sname = (sceneList.find(s=>s.id===scene.value)?.name||'device').replace(/\s+/g,'_')
+
+  if (command === 'md') {
+    // Markdown 格式：每个厂商一个代码块
+    let md = `# ${hostname} — ${sname} 配置脚本\n\n`
+    md += `> 生成时间：${new Date().toLocaleString('zh-CN')}\n`
+    md += `> 厂商数：${allOutputs.value.length}\n\n---\n\n`
+    for (const out of allOutputs.value) {
+      md += `## ${out.vendorName}\n\`\`\`\n${out.output}\n\`\`\`\n\n`
+    }
+    downloadBlob(md, `${hostname}.md`, 'text/markdown')
+  } else if (command === 'cfg-all') {
+    // 多个 .cfg 文件打包下载（逐个下载）
+    for (const out of allOutputs.value) {
+      const fn = `${hostname}_${sname}_${out.vendor}.cfg`
+      downloadBlob(out.output, fn, 'text/plain')
+    }
+    ElMessage.success(`已导出 ${allOutputs.value.length} 个文件`)
+    return
+  } else {
+    // cfg / txt 单厂商
+    const out = allOutputs.value[Number(activeOutputTab.value)]
+    if (!out) { ElMessage.warning('请先选择要导出的厂商 Tab'); return }
+    const ext = command === 'txt' ? 'txt' : 'cfg'
+    downloadBlob(out.output, `${hostname}_${sname}_${out.vendor}.${ext}`, 'text/plain')
+  }
+  ElMessage.success(`已导出`)
 }
 
-// 导出 Excel（多厂商配置对比表）
+/** 通用 Blob 下载 */
+function downloadBlob(content: string, filename: string, mime = 'text/plain;charset=utf-8') {
+  const b = new Blob([content], { type: mime })
+  const u = URL.createObjectURL(b)
+  const a = document.createElement('a'); a.href = u; a.download = filename
+  a.click(); URL.revokeObjectURL(u)
+}
+
+// 导出 Excel（保留原功能）
+// SSH 配置下发
+const sshVisible=ref(false), sshHost=ref(''), sshUser=ref('admin'), sshPwd=ref(''), sshPort=ref(22)
+const sshRunning=ref(false), sshResult=ref<any>(null)
+async function onSshExec(){
+  const out = allOutputs.value[Number(activeOutputTab.value)]; if(!out)return
+  sshRunning.value=true; sshResult.value=null
+  try {
+    const cmds = out.output.replace(/#.*/g,'').split('\n').filter(l=>l.trim()&&!l.startsWith('!')).join('\\n')
+    const res = await api.post('/net/ssh-exec', null, { params:{ host:sshHost.value, username:sshUser.value, password:sshPwd.value, port:sshPort.value, commands:cmds }})
+    sshResult.value = res.data
+  } catch(e:any){ sshResult.value = {success:false, error: e.response?.data?.detail || e.message} }
+  sshRunning.value=false
+}
+
 function handleExportExcel() {
   if (allOutputs.value.length === 0) return
-  // 每个厂商一列，加上行号列
   const maxLines = Math.max(...allOutputs.value.map(o => o.output.split('\n').length))
   const rows: Record<string, string>[] = []
   for (let i = 0; i < maxLines; i++) {
@@ -547,12 +683,35 @@ async function batchGenerateAll() {
   })
   if (!showValidationResult(batchIssues)) return
   batchGenerating.value = true; batchResults.value = []
+  // 判断场景类型
+  const isBatchRouter = batchScene.value === 'router'
+  const isBatchFirewall = batchScene.value === 'firewall'
   for (const dev of batchDevices.value) {
     const vlans = parseVlanIds(dev.vlanRange)
-    const config: Record<string,any> = { description: dev.description||'批量生成', basic: { hostname: dev.hostname, mgmt_ip: dev.mgmtIp }, vlan: vlans.length>0?{vlans,interfaces:vlans.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id}))}:{}, routing:{}, security:{}, interface:{}, service:{} }
+    const config: Record<string,any> = {
+      description: dev.description||'批量生成',
+      basic: { hostname: dev.hostname, mgmt_ip: dev.mgmtIp },
+      routing:{}, security:{}, interface:{}, service:{}
+    }
+    if (isBatchRouter) {
+      // 路由器场景：使用主表单已配好的 WAN/DHCP/NAT/ACL/QoS
+      config.wan = {...formWan.value}
+      config.dhcp = {...formDhcp.value}
+      config.nat = {...formNat.value}
+      config.acl = {...formAcl.value}
+      config.qos = {...formQos.value}
+      config.vlan = vlans.length>0 ? {vlans, interfaces:vlans.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id}))} : {}
+    } else if (isBatchFirewall) {
+      config.wan = {...formWan.value}
+      config.firewall = {...formFirewall.value}
+      config.vlan = {}
+    } else {
+      // 交换机场景：VLAN 配置
+      config.vlan = vlans.length>0 ? {vlans, interfaces:vlans.map(v=>({interface:`GigabitEthernet0/0/${v.id}`,type:'access',vlan_id:v.id}))} : {}
+    }
     try { const bv = batchVendor.value; const vrp = ['huawei','h3c','routeros'].includes(bv)?vrpVersion.value:undefined; const res = await apiGenerateFull({ vendor: bv, config, vrp_version: vrp })
       batchResults.value.push({ hostname: dev.hostname, output: res.output, lines: res.output.split('\n').length, error: false, expanded: false })
-    } catch (e: any) { batchResults.value.push({ hostname: dev.hostname, output: `# 失败: ${e.response?.data?.detail||(e as Error).message}`, lines: 1, error: true, expanded: true }) }
+    } catch (e: any) { batchResults.value.push({ hostname: dev.hostname, output: `# 失败: ${friendlyError(e)}`, lines: 1, error: true, expanded: true }) }
   }
   batchGenerating.value = false; ElMessage.success(`已生成 ${batchResults.value.length} 台设备`)
 }

@@ -1,9 +1,11 @@
 """网络诊断工具 API — Ping / 端口扫描 / Traceroute / DNS 查询"""
 from __future__ import annotations
 
+import json
 import re
 import socket
 import struct
+from typing import Generator
 
 try:
     import dns.resolver
@@ -18,6 +20,7 @@ import platform
 from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/net", tags=["网络工具"])
 
@@ -136,6 +139,65 @@ def ping_host(
         "avg_rtt": round(sum(successful) / len(successful), 1) if successful else None,
         "results": results,
     }
+
+
+
+@router.get("/ping/stream", summary="Ping 流式测试")
+def ping_stream(
+    target: str = Query(..., description="目标 IP 或域名"),
+    count: int = Query(default=4, ge=1, le=50, description="发包次数"),
+    timeout: float = Query(default=3.0, ge=0.5, le=10.0, description="超时(秒)"),
+):
+    """Ping 流式返回 — 每发一个包立即推送一个 SSE 事件，前端实时逐包展示。"""
+    def generate() -> Generator[str, None, None]:
+        target_str = str(target) if not isinstance(target, str) else target
+        count_val = int(count.default) if hasattr(count, 'default') else int(count)
+        timeout_val = float(timeout.default) if hasattr(timeout, 'default') else float(timeout)
+
+        all_results: list = []
+        lost = 0
+        for i in range(count_val):
+            rtt = _ping_once(target_str, timeout_val)
+            rtt_val = round(rtt, 1) if rtt else None
+            item = {"seq": i + 1, "rtt": rtt_val, "status": "ok" if rtt_val is not None else "timeout"}
+            all_results.append(item)
+            if rtt_val is None:
+                lost += 1
+
+            # 每发一个包立即推送，实现真正的逐包实时流
+            successful = [r["rtt"] for r in all_results if r["rtt"] is not None]
+            is_last = (i == count_val - 1)
+            payload = {
+                "target": target_str,
+                "count": count_val,
+                "sent": i + 1,
+                "received": (i + 1) - lost,
+                "lost": lost,
+                "loss_percent": round(lost / (i + 1) * 100, 1) if (i + 1) > 0 else 0,
+                "min_rtt": round(min(successful), 1) if successful else None,
+                "max_rtt": round(max(successful), 1) if successful else None,
+                "avg_rtt": round(sum(successful) / len(successful), 1) if successful else None,
+                "results": all_results[:],
+                "progress": not is_last,
+            }
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        # 推送最终结果（progress=false 标记完成）
+        successful = [r["rtt"] for r in all_results if r["rtt"] is not None]
+        final = {
+            "target": target_str, "count": count_val,
+            "sent": count_val, "received": count_val - lost,
+            "lost": lost,
+            "loss_percent": round(lost / count_val * 100, 1) if count_val > 0 else 0,
+            "min_rtt": round(min(successful), 1) if successful else None,
+            "max_rtt": round(max(successful), 1) if successful else None,
+            "avg_rtt": round(sum(successful) / len(successful), 1) if successful else None,
+            "results": all_results,
+            "progress": False,
+        }
+        yield f"data: {json.dumps(final, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @router.get("/portscan", summary="TCP 端口扫描")
@@ -299,6 +361,122 @@ def traceroute(
         raise HTTPException(500, f"Traceroute 失败: {e}")
 
 
+@router.get("/traceroute/stream", summary="路由追踪 逐跳流式 SSE")
+def traceroute_stream(
+    target: str = Query(..., description="目标 IP 或域名"),
+    max_hops: int = Query(default=15, ge=1, le=30),
+    timeout: float = Query(default=2, ge=0.5, le=5),
+    probes_per_hop: int = Query(default=3, ge=1, le=5, description="每跳探测次数"),
+):
+    """逐跳实时推送路由追踪结果 — 用 Ping + 递增 TTL 模拟 traceroute。
+
+    每完成一跳立即通过 SSE 推送给前端，实现逐跳动态呈现效果。
+    参考 NextTrace 的逐跳可视化理念，但使用系统 Ping 实现（无需 root 权限）。
+    """
+    def generate() -> Generator[str, None, None]:
+        hops_data: list = []
+        reached_target = False
+        system = platform.system()
+
+        for ttl in range(1, max_hops + 1):
+            if reached_target:
+                break
+
+            hop_rtts: list[float | None] = []
+            hop_ip = "超时"
+
+            # 对当前 TTL 发送 probes_per_hop 次探测
+            for probe_i in range(probes_per_hop):
+                try:
+                    if system == "Windows":
+                        # Windows: ping -n 1 -i TTL -w timeout_ms target
+                        cmd = [
+                            "ping", "-n", "1", "-i", str(ttl),
+                            "-w", str(int(timeout * 1000)), target
+                        ]
+                    else:
+                        # Linux: ping -c 1 -t TTL -W timeout target
+                        cmd = [
+                            "ping", "-c", "1", "-t", str(ttl),
+                            "-W", str(int(timeout)), target
+                        ]
+
+                    proc = subprocess.run(
+                        cmd,
+                        capture_output=True, text=True,
+                        timeout=timeout + 1
+                    )
+
+                    # 解析回复 IP（TTL 过期时中间路由回 ICMP 报文，系统 ping 会显示来源 IP）
+                    output = proc.stdout + proc.stderr
+                    rtt = None
+
+                    if system == "Windows":
+                        # Windows: "来自 192.168.1.1 的回复: 字节=32 时间<1ms TTL=64"
+                        ip_re = re.search(r"来自\s+(\d+\.\d+\.\d+\.\d+)", output)
+                        time_re = re.search(r"时间[=<]\s*(\d+)\s*ms", output)
+                        if not time_re:
+                            time_re = re.search(r"time[=<]\s*(\d+)\s*ms", output)
+                        if not ip_re:
+                            # TTL 过期: "来自 10.0.0.1 的回复：TTL 传输中过期。"
+                            ip_re = re.search(r"来自\s+(\d+\.\d+\.\d+\.\d+).*TTL.*过期", output)
+                    else:
+                        # Linux: "From 192.168.1.1 icmp_seq=1 Time to live exceeded"
+                        # 或 "64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=12.3 ms"
+                        ip_re = re.search(r"[Ff]rom\s+(\d+\.\d+\.\d+\.\d+)", output)
+                        time_re = re.search(r"time[=<]\s*(\d+\.?\d*)\s*ms", output)
+
+                    if ip_re:
+                        hop_ip = ip_re.group(1)
+                    if time_re:
+                        rtt = float(time_re.group(1))
+                        if rtt < 0.5:
+                            rtt = 0.5
+
+                    # 判断是否到达目标
+                    if proc.returncode == 0 and "TTL" not in output:
+                        reached_target = True
+
+                    hop_rtts.append(round(rtt, 1) if rtt else None)
+
+                except Exception:
+                    hop_rtts.append(None)
+
+            # 计算该跳统计
+            valid_rtts = [r for r in hop_rtts if r is not None]
+            hop_item = {
+                "hop": ttl,
+                "ip": hop_ip,
+                "rtts": hop_rtts,
+                "avg_rtt": round(sum(valid_rtts) / len(valid_rtts), 1) if valid_rtts else None,
+                "loss": hop_rtts.count(None),
+                "reached": reached_target and hop_ip != "超时",
+            }
+            hops_data.append(hop_item)
+
+            # 每完成一跳立即推送
+            payload = {
+                "target": target,
+                "max_hops": max_hops,
+                "total_hops": len(hops_data),
+                "hops": hops_data[:],
+                "progress": not (reached_target or ttl >= max_hops),
+            }
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        # 最终完成信号
+        final = {
+            "target": target,
+            "max_hops": max_hops,
+            "total_hops": len(hops_data),
+            "hops": hops_data,
+            "progress": False,
+        }
+        yield f"data: {json.dumps(final, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
 @router.get("/dns", summary="DNS 域名解析查询")
 def dns_lookup(
     domain: str = Query(..., description="域名", examples=["baidu.com"]),
@@ -361,3 +539,40 @@ def dns_lookup(
 def port_service_lookup():
     """返回已知端口号对应的服务名称表"""
     return {"ports": [{"port": k, "service": v} for k, v in sorted(COMMON_PORTS.items())]}
+
+
+@router.post("/ssh-exec", summary="SSH 配置下发")
+def ssh_exec(
+    host: str = Query(..., description="设备 IP"),
+    username: str = Query(default="admin", description="SSH 用户名"),
+    password: str = Query(..., description="SSH 密码"),
+    commands: str = Query(..., description="要执行的命令，多行用 \\n 分隔"),
+    port: int = Query(default=22, ge=1, le=65535, description="SSH 端口"),
+    timeout: int = Query(default=10, ge=1, le=60, description="连接超时秒数"),
+):
+    """通过 SSH 连接设备并执行配置命令。"""
+    import paramiko
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(host, port=port, username=username, password=password, timeout=timeout)
+        results = []
+        for cmd in commands.split("\\n"):
+            cmd = cmd.strip()
+            if not cmd:
+                continue
+            _stdin, stdout, stderr = client.exec_command(cmd, timeout=timeout + 5)
+            out = stdout.read().decode("utf-8", errors="replace").strip()
+            err = stderr.read().decode("utf-8", errors="replace").strip()
+            results.append({
+                "command": cmd,
+                "output": out or err,
+                "status": "error" if err and "error" in err.lower() else "ok",
+            })
+        return {"host": host, "success": True, "results": results}
+    except paramiko.AuthenticationException:
+        return {"host": host, "success": False, "error": "SSH 认证失败，请检查用户名/密码"}
+    except Exception as e:
+        return {"host": host, "success": False, "error": f"连接失败: {str(e)[:200]}"}
+    finally:
+        client.close()

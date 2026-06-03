@@ -221,8 +221,119 @@ class RuijieAdapter:
     def generate_full(self, config: Dict[str, Any]) -> str:
         device_type = "路由器" if "wan" in config else "交换机"
         sections = ["!", f"# 锐捷{device_type}配置脚本", "!"]
-        for key in ("basic", "vlan", "routing", "security", "interface", "service"):
-            if key in config:
-                sections.append(self.generate(key, config[key]))
+
+        for key in ("basic", "vlan", "routing", "security", "interface", "service", "wan", "dhcp", "nat", "acl", "ipv6"):
+            if key not in config:
+                continue
+            params = config[key]
+
+            if key == "wan":
+                sections.append(self._gen_wan(params))
+            elif key == "ipv6":
+                sections.append(self._gen_ipv6(params))
+            elif key == "dhcp":
+                sections.append(self._gen_dhcp(params))
+            elif key == "nat":
+                sections.append(self._gen_nat(params))
+            elif key == "acl":
+                sections.append(self._gen_acl_separate(params))
+            else:
+                sections.append(self.generate(key, params))
+
         sections.append("end")
         return "\n".join(sections)
+
+    # ── IPv6 ────────────────────────────────────────────────
+    def _gen_ipv6(self, params: Dict[str, Any]) -> str:
+        out = ["!", "# IPv6配置", "!", "ipv6"]
+        for iface in (params.get("interfaces") or []):
+            addr = iface.get("ipv6_address", "")
+            if addr:
+                out.append(f"interface {iface.get('interface','GigabitEthernet 0/1')}")
+                out.append(" ipv6 enable"); out.append(f" ipv6 address {addr}")
+                if iface.get("ipv6_ra", True): out.append(" ipv6 nd ra"); out.append("!")
+        return "\n".join(out)
+
+    # ── WAN 口上网 ──────────────────────────────────────────
+    def _gen_wan(self, params: Dict[str, Any]) -> str:
+        """生成锐捷 WAN 口上网配置（PPPoE / 静态IP / DHCP）。"""
+        out = ["!", "# WAN口上网配置", "!"]
+        wan_type = params.get("connectionType", "static")
+        iface = params.get("interface", "GigabitEthernet 0/1")
+        out.append(f"interface {iface}")
+        out.append(f" description WAN-{wan_type.upper()}")
+
+        if wan_type == "pppoe":
+            out.append(" pppoe-client dial-bundle-number 1")
+            out.append("!")
+            out.append("interface Dialer 1")
+            out.append(" ip address negotiate")
+            out.append(" dialer user {user}".format(user=params.get("pppoeUser", "")))
+            out.append(" dialer bundle 1")
+            out.append(" dialer-group 1")
+            out.append(" ppp chap user {user}".format(user=params.get("pppoeUser", "")))
+            out.append(" ppp chap password simple {pwd}".format(pwd=params.get("pppoePassword", "")))
+            out.append("!")
+            out.append("dialer-list 1 protocol ip permit")
+        elif wan_type == "dhcp":
+            out.append(" ip address dhcp")
+        else:
+            out.append(f" ip address {params.get('wanIp', '')} {params.get('wanMask', '255.255.255.0')}")
+            if params.get("wanGateway"):
+                out.append(f"!ip route 0.0.0.0 0.0.0.0 {params['wanGateway']}")
+
+        out.append("!")
+        return "\n".join(out)
+
+    # ── DHCP 服务 ───────────────────────────────────────────
+    def _gen_dhcp(self, params: Dict[str, Any]) -> str:
+        """生成锐捷 DHCP 服务配置（LAN 侧地址池）。"""
+        out = ["!", "# DHCP服务", "!"]
+        out.append("service dhcp")
+        for line in (params.get("dhcpLines") or params.get("lines") or []):
+            net = line.get("network", "")
+            mask = line.get("mask", "255.255.255.0")
+            gw = line.get("gateway", "")
+            dns = line.get("dns", "")
+            start_ip = line.get("startIp", "") or line.get("start_ip", "")
+            end_ip = line.get("endIp", "") or line.get("end_ip", "")
+            lease = line.get("lease", "1")
+            out.append(f"ip dhcp pool DHCP-{net.split('.')[2] if net else 'LAN'}")
+            out.append(f" network {net} {mask}")
+            if gw:
+                out.append(f" default-router {gw}")
+            if dns:
+                out.append(f" dns-server {dns}")
+            if start_ip and end_ip:
+                out.append(f" range {start_ip} {end_ip}")
+            out.append(f" lease {lease}")
+            out.append("!")
+        return "\n".join(out)
+
+    # ── NAT 端口映射 ────────────────────────────────────────
+    def _gen_nat(self, params: Dict[str, Any]) -> str:
+        """生成锐捷 NAT 端口映射配置。"""
+        out = ["!", "# NAT端口映射", "!"]
+        rules = params.get("rules") or params.get("natList") or params.get("natLines") or []
+        for r in rules:
+            proto = r.get("protocol", "tcp")
+            ext_port = r.get("externalPort") or r.get("ext_port", "")
+            int_ip = r.get("internalIp") or r.get("int_ip", "")
+            int_port = r.get("internalPort") or r.get("int_port", "")
+            out.append(f"ip nat inside source static {proto} {int_ip} {int_port} interface Dialer 1 {ext_port}")
+        out.append("!")
+        return "\n".join(out)
+
+    # ── ACL 访问控制 ────────────────────────────────────────
+    def _gen_acl_separate(self, params: Dict[str, Any]) -> str:
+        """生成锐捷 ACL 访问控制配置。"""
+        out = ["!", "# ACL访问控制", "!"]
+        rules = params.get("rules") or params.get("aclList") or []
+        for r in rules:
+            action = "permit" if r.get("action") == "allow" else "deny"
+            src = r.get("sourceIp") or r.get("source", "any")
+            dst = r.get("destIp") or r.get("destination", "any")
+            out.append(f"ip access-list extended ACL-{r.get('name', 'FILTER')}")
+            out.append(f" {action} ip {src} {dst}")
+        out.append("!")
+        return "\n".join(out)

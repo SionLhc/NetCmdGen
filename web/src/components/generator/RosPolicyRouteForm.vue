@@ -20,13 +20,13 @@
         <el-row :gutter="8" style="margin-bottom:8px">
           <el-col :span="12">
             <div class="wan-select-label">🇨🇳 国内流量走</div>
-            <el-select v-model="form.cnRoute.cnWan" size="small" style="width:100%">
+            <el-select v-model="form.cnRoute.cnWan" size="small" style="width:100%" filterable allow-create default-first-option>
               <el-option v-for="w in wanList" :key="w" :label="w + '（国内线）'" :value="w" />
             </el-select>
           </el-col>
           <el-col :span="12">
             <div class="wan-select-label">🌐 国外/海外流量走</div>
-            <el-select v-model="form.cnRoute.intlWan" size="small" style="width:100%">
+            <el-select v-model="form.cnRoute.intlWan" size="small" style="width:100%" filterable allow-create default-first-option>
               <el-option v-for="w in wanList" :key="w" :label="w + '（海外线）'" :value="w" />
             </el-select>
           </el-col>
@@ -50,26 +50,31 @@
         <span style="font-size:13px;font-weight:600">规则 {{ i + 1 }}</span>
         <el-button text type="danger" size="small" @click="form.deviceRoutes.splice(i,1);emitUpdate()">× 删除</el-button>
       </div>
-      <el-row :gutter="6">
-        <el-col :span="8">
-          <div class="field-label">哪个设备/网段？</div>
-          <el-input v-model="pr.srcAddr" size="small" placeholder="192.168.10.0/24 或 单IP" />
-          <span class="field-hint">财务部网段/监控服务器/会议室IP</span>
+      <el-row :gutter="8">
+        <el-col :span="6">
+          <div class="field-label">设备/网段</div>
+          <el-input v-model="pr.srcAddr" size="small" placeholder="192.168.10.0/24" />
+          <span class="field-hint">财务部/监控/会议室IP</span>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="6">
           <div class="field-label">走哪条线路？</div>
-          <el-select v-model="pr.wanInterface" size="small" style="width:100%">
+          <el-select v-model="pr.wanInterface" size="small" style="width:100%" filterable allow-create default-first-option>
             <el-option v-for="w in wanList" :key="w" :label="w" :value="w" />
           </el-select>
-          <span class="field-hint">指定出口 WAN 口</span>
+          <span class="field-hint">可自定义名称，如 HK/CN2</span>
         </el-col>
-        <el-col :span="8">
+        <el-col :span="6">
+          <div class="field-label">出口公网 IP</div>
+          <el-input v-model="pr.srcNatIp" size="small" placeholder="留空 = masquerade" />
+          <span class="field-hint">多公网IP时指定，如 203.0.113.5</span>
+        </el-col>
+        <el-col :span="6">
           <div class="field-label">备注说明</div>
           <el-input v-model="pr.comment" size="small" placeholder="如：财务专线" />
         </el-col>
       </el-row>
       <div class="ros-hint-box" style="margin-top:8px">
-        {{ pr.srcAddr ? `✅ ${pr.srcAddr} → ${pr.wanInterface || '未选'}` : '⚠ 请填写设备IP或网段' }}
+        {{ pr.srcAddr ? '✅ ' + pr.srcAddr + ' → ' + (pr.wanInterface || '未选') + (pr.srcNatIp ? '（SNAT: ' + pr.srcNatIp + '）' : '（自动masquerade）') : '⚠ 请填写设备IP或网段' }}
         <span v-if="pr._expired" style="color:#e6a23c">（已失效，请更新）</span>
       </div>
     </div>
@@ -103,7 +108,7 @@
         </el-col>
         <el-col :span="6">
           <div class="field-label">走哪条线路</div>
-          <el-select v-model="ar.wanInterface" size="small" style="width:100%">
+          <el-select v-model="ar.wanInterface" size="small" style="width:100%" filterable allow-create default-first-option>
             <el-option v-for="w in wanList" :key="w" :label="w" :value="w" />
           </el-select>
         </el-col>
@@ -136,7 +141,7 @@ const form = reactive({
     intlWan: props.modelValue?.cnRoute?.intlWan || (wanList.value[1] || wanList.value[0]),
   },
   deviceRoutes: props.modelValue?.deviceRoutes?.length ? props.modelValue.deviceRoutes : [
-    { srcAddr: '', wanInterface: wanList.value[0], comment: '', _expired: false },
+    { srcAddr: '', wanInterface: wanList.value[0], srcNatIp: '', comment: '', _expired: false },
   ] as any[],
   appRoutes: props.modelValue?.appRoutes?.length ? props.modelValue.appRoutes : [
     { appType: 'web', customPorts: '', wanInterface: wanList.value[0], comment: '' },
@@ -144,7 +149,7 @@ const form = reactive({
 })
 
 function addDeviceRoute() {
-  form.deviceRoutes.push({ srcAddr: '', wanInterface: wanList.value[0], comment: '', _expired: false })
+  form.deviceRoutes.push({ srcAddr: '', wanInterface: wanList.value[0], srcNatIp: '', comment: '', _expired: false })
   emitUpdate()
 }
 

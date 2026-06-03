@@ -1,28 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 64" width="80" height="64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="fwGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ff8a4a"/>
-      <stop offset="50%" stop-color="#f56c20"/>
-      <stop offset="100%" stop-color="#d44a08"/>
+    <linearGradient id="fw" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c"/>
     </linearGradient>
   </defs>
-  <!-- 火焰主体 -->
-  <path d="M 40 56 
-           C 22 56, 14 44, 18 30 
-           C 20 24, 24 22, 26 26 
-           C 26 18, 32 12, 36 14 
-           C 34 6, 42 4, 46 12 
-           C 50 18, 48 24, 50 28 
-           C 54 22, 60 26, 62 34 
-           C 66 44, 58 56, 40 56 Z"
-        fill="url(#fwGrad)" stroke="#a83408" stroke-width="1"/>
-  <!-- 内部火焰 -->
-  <path d="M 40 50 
-           C 30 50, 26 42, 28 34 
-           C 30 30, 32 30, 34 32 
-           C 34 26, 38 22, 40 24 
-           C 42 18, 46 22, 46 28 
-           C 48 32, 52 36, 50 42 
-           C 48 48, 44 50, 40 50 Z"
-        fill="#ffc04a" opacity="0.7"/>
+  <rect x="6" y="4" width="52" height="56" rx="8" fill="url(#fw)"/>
+  <rect x="14" y="8" width="36" height="6" rx="3" fill="#fff" opacity="0.2"/>
+  <path d="M26 18L20 26l6 8" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+  <path d="M38 18l6 8-6 8" stroke="#fff" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
+  <rect x="14" y="38" width="36" height="4" rx="2" fill="#fff" opacity="0.25"/>
+  <rect x="14" y="46" width="36" height="4" rx="2" fill="#fff" opacity="0.25"/>
+  <rect x="14" y="54" width="36" height="4" rx="2" fill="#fff" opacity="0.25"/>
 </svg>

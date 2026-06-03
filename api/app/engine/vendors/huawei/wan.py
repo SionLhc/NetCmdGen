@@ -162,6 +162,53 @@ class HuaweiWanGenerator:
         return "\n".join(lines)
 
     @staticmethod
+    def generate_ipv6(ipv6_config: dict) -> str:
+        """生成 IPv6 基础配置"""
+        out = ["# IPv6 配置", "ipv6"]
+        for iface in (ipv6_config.get("interfaces") or []):
+            port = iface.get("interface", "GigabitEthernet0/0/1")
+            addr = iface.get("ipv6_address", "")
+            if addr:
+                out.append(f"interface {port}")
+                out.append(" ipv6 enable")
+                out.append(f" ipv6 address {addr}")
+                if iface.get("ipv6_ra", True):
+                    out.append(" ipv6 nd ra")
+                    out.append(" undo ipv6 nd ra halt")
+                out.append("#")
+        for r in (ipv6_config.get("ipv6_routes") or []):
+            out.append(f"ipv6 route-static {r.get('dest','::/0')} {r.get('nexthop','')}")
+        return "\n".join(out)
+
+    @staticmethod
+    def generate_wireless(wlan_config: dict) -> str:
+        """生成 WLAN 无线配置（SSID + 安全 + AP 组）"""
+        out = ["# WLAN 无线配置", "wlan"]
+        for ssid in (wlan_config.get("ssids") or []):
+            name = ssid.get("name", "OFFICE")
+            out.extend([
+                f" ssid-profile name {name}",
+                f"  ssid {ssid.get('ssid', f'{name}-WiFi')}",
+            ])
+            sec = ssid.get("security", "wpa2")
+            if sec == "wpa2":
+                out.append(f" security wpa2 psk pass-phrase {ssid.get('passphrase','admin123')}")
+            elif sec == "wpa3":
+                out.append(f" security wpa3 sae pass-phrase {ssid.get('passphrase','admin123')}")
+            out.append(f"!")
+        for radio in (wlan_config.get("radios") or []):
+            out.extend([
+                f"ap-group name {radio.get('ap_group','DEFAULT')}",
+                f" ap-system-profile DEFAULT",
+                f" radio {radio.get('radio_id',0)}",
+                f"  channel {radio.get('channel',6)}",
+                f"  power {radio.get('power',20)}",
+                f"!",
+            ])
+        out.append("#")
+        return "\n".join(out)
+
+    @staticmethod
     def generate_wan_all(wan_config: dict) -> str:
         """生成完整的 WAN 配置"""
         if not wan_config:

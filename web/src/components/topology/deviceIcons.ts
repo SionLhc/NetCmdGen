@@ -67,6 +67,18 @@ export const deviceIcons: Record<string, DeviceIcon> = {
         color: '#6366f1',
         iconUrl: '/icons/optical-transceiver.svg',
     },
+    'load-balancer': {
+        type: 'load-balancer',
+        name: '负载均衡',
+        color: '#14b8a6',
+        iconUrl: '/icons/load-balancer.svg',
+    },
+    'olt': {
+        type: 'olt',
+        name: 'GPON OLT',
+        color: '#1e40af',
+        iconUrl: '/icons/olt.svg',
+    },
 
     // ── 终端设备 ────────────────────────────────────────
     'server': {
@@ -171,7 +183,8 @@ export const deviceGroups: DeviceGroup[] = [
         id: 'network',
         title: '网络设备',
         devices: ['core-switch', 'agg-switch', 'access-switch', 'router', 'routeros',
-                   'wireless-ac', 'wireless-ap', 'antenna', 'optical-transceiver']
+                   'wireless-ac', 'wireless-ap', 'antenna', 'optical-transceiver',
+                   'load-balancer', 'olt']
             .map(t => deviceIcons[t]),
     },
     {

@@ -31,7 +31,7 @@
     <!-- Bridge 配置 -->
     <el-divider content-position="left">🌉 Bridge 桥接</el-divider>
     <el-form-item label="创建 Bridge">
-      <el-button size="small" @click="form.bridges.push({name:'bridge'+(form.bridges.length+1),ports:[],vlanFiltering:false});emitUpdate()">+ 新建 Bridge</el-button>
+      <el-button size="small" @click="form.bridges.push({name:'bridge'+(form.bridges.length+1),stp:'rstp',vlanFiltering:false,portsStr:''});emitUpdate()">+ 新建 Bridge</el-button>
     </el-form-item>
     <div v-for="(br, bi) in form.bridges" :key="'br'+bi" class="bridge-card">
       <div class="bridge-header">

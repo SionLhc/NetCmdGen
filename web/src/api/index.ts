@@ -136,4 +136,105 @@ export const doDns = (domain: string, recordType = 'A') =>
 export const doWhois = (domain: string) =>
   api.get('/tools/whois', { params: { domain } }).then((r) => r.data)
 
+/** 流式 Ping — 每包实时推送，返回 AbortController 用于取消 */
+export const doPingStream = (
+  target: string, count: number, timeout: number,
+  onProgress: (data: any) => void,
+  onDone: (data: any) => void,
+  onError: (err: any) => void,
+): AbortController => {
+  const controller = new AbortController()
+  const params = new URLSearchParams({ target, count: String(count), timeout: String(timeout) })
+  fetch(`/api/net/ping/stream?${params}`, { signal: controller.signal })
+    .then(async (res) => {
+      const reader = res.body?.getReader()
+      if (!reader) { onError(new Error('无法读取流')); return }
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const match = line.match(/^data: (.+)$/m)
+          if (match) {
+            try {
+              const data = JSON.parse(match[1])
+              if (data.progress) onProgress(data)
+              else onDone(data)
+            } catch {}
+          }
+        }
+      }
+    })
+    .catch((e) => { if (e.name !== 'AbortError') onError(e) })
+  return controller
+}
+
+/** 流式 Traceroute — 逐跳实时推送，返回 AbortController 用于取消 */
+export const doTraceStream = (
+  target: string, maxHops: number, timeout: number, probesPerHop: number,
+  onProgress: (data: any) => void,
+  onDone: (data: any) => void,
+  onError: (err: any) => void,
+): AbortController => {
+  const controller = new AbortController()
+  const params = new URLSearchParams({
+    target,
+    max_hops: String(maxHops),
+    timeout: String(timeout),
+    probes_per_hop: String(probesPerHop),
+  })
+  fetch(`/api/net/traceroute/stream?${params}`, { signal: controller.signal })
+    .then(async (res) => {
+      const reader = res.body?.getReader()
+      if (!reader) { onError(new Error('无法读取流')); return }
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const match = line.match(/^data: (.+)$/m)
+          if (match) {
+            try {
+              const data = JSON.parse(match[1])
+              if (data.progress) onProgress(data)
+              else onDone(data)
+            } catch {}
+          }
+        }
+      }
+    })
+    .catch((e) => { if (e.name !== 'AbortError') onError(e) })
+  return controller
+}
+
+// ─── 拓扑持久化（服务器文件存储）───────────────────────
+export interface TopoItem {
+  id: string
+  name: string
+  created_at?: string
+  updated_at?: string
+}
+export const getTopoList = () =>
+  api.get<{ items: TopoItem[] }>('/topologies').then(r => r.data.items)
+export const createTopo = (name: string) =>
+  api.post<{ id: string; name: string }>('/topologies', { name }).then(r => r.data)
+export const getTopoData = (id: string) =>
+  api.get<{ id: string; data: any }>(`/topologies/${id}`).then(r => r.data)
+export const saveTopoData = (id: string, data: any) =>
+  api.put(`/topologies/${id}`, { data }).then(r => r.data)
+export const renameTopo = (id: string, new_name: string) =>
+  api.patch(`/topologies/${id}/rename`, null, { params: { new_name } }).then(r => r.data)
+export const deleteTopo = (id: string) =>
+  api.delete(`/topologies/${id}`).then(r => r.data)
+export const importTopo = (data: any) =>
+  api.post<{ id: string; name: string }>('/topologies/import', { data }).then(r => r.data)
+
 export default api

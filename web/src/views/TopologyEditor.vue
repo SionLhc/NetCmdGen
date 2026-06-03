@@ -24,6 +24,7 @@
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleSave">保存</el-button>
         <el-button size="small" @click="handleDownload">导出 JSON</el-button>
+        <el-button size="small" @click="handleImportJson">导入 JSON</el-button>
         <el-button size="small" @click="handleExportPng">导出 PNG</el-button>
       </div>
       <div class="toolbar-right">
@@ -181,7 +182,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { Graph } from '@antv/x6'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTopologyStore } from '@/stores/topology'
 import DevicePalette from '@/components/topology/DevicePalette.vue'
 import PropertyPanel from '@/components/topology/PropertyPanel.vue'
@@ -189,70 +190,93 @@ import PropertyPanel from '@/components/topology/PropertyPanel.vue'
 const topologyStore = useTopologyStore()
 const canvasRef = ref<HTMLDivElement>()
 
-// ─── 多拓扑管理 ──────────────────────────────────────
-const TOPO_LIST_KEY = 'netcmdgen_topo_list'
-const TOPO_DATA_PREFIX = 'netcmdgen_topo_'
+// ─── 多拓扑管理（服务器文件存储）─────────────────────
+import { getTopoList, createTopo, getTopoData, saveTopoData, renameTopo, deleteTopo, importTopo, type TopoItem } from '@/api'
 
-interface TopoItem { id: string; name: string }
-const topoList = ref<TopoItem[]>(loadTopoList())
-const currentTopoId = ref(topoList.value[0]?.id || '')
+const topoList = ref<TopoItem[]>([])
+const currentTopoId = ref('')
+const topoLoading = ref(false)
 
-function loadTopoList(): TopoItem[] {
-  try { const r = localStorage.getItem(TOPO_LIST_KEY); return r ? JSON.parse(r) : [{id:'default',name:'默认拓扑'}] }
-  catch { return [{id:'default',name:'默认拓扑'}] }
+/** 启动时从服务器加载拓扑列表 */
+async function initTopoList() {
+  topoLoading.value = true
+  try {
+    const items = await getTopoList()
+    if (items.length === 0) {
+      // 首次使用，自动创建一个默认方案
+      const { id } = await createTopo('默认拓扑')
+      topoList.value = [{ id, name: '默认拓扑' }]
+    } else {
+      topoList.value = items
+    }
+    currentTopoId.value = topoList.value[0]?.id || ''
+    await loadCurrentTopo()
+  } catch { ElMessage.error('加载拓扑列表失败，请检查后端是否启动') }
+  finally { topoLoading.value = false }
 }
-function saveTopoList() { localStorage.setItem(TOPO_LIST_KEY, JSON.stringify(topoList.value)) }
 
 function handleNewTopo() {
-  const name = prompt('新建拓扑名称:', `拓扑方案${topoList.value.length+1}`)
-  if (!name) return
-  const item: TopoItem = { id: `topo_${Date.now()}`, name }
-  topoList.value.push(item); saveTopoList()
-  currentTopoId.value = item.id
-  graph?.clearCells(); handleSave()
-  ElMessage.success(`已创建: ${name}`)
+  ElMessageBox.prompt('请输入拓扑名称', '新建拓扑', {
+    confirmButtonText: '创建', cancelButtonText: '取消',
+    inputValue: `拓扑方案${topoList.value.length + 1}`,
+  }).then(async ({ value }) => {
+    const name = value?.trim(); if (!name) return
+    const { id } = await createTopo(name)
+    topoList.value.push({ id, name }); currentTopoId.value = id
+    graph?.clearCells()
+    ElMessage.success(`已创建: ${name}`)
+  }).catch(() => {})
 }
 
-function switchTopo(id: string) {
+async function switchTopo(id: string) {
   if (!graph) return
-  // 保存当前拓扑
+  // 先保存当前
   const oldData = graph.toJSON()
-  if (Object.keys(oldData.cells || {}).length > 0) {
-    localStorage.setItem(TOPO_DATA_PREFIX + currentTopoId.value, JSON.stringify(oldData))
+  if (oldData.cells && oldData.cells.length > 0) {
+    await saveTopoData(currentTopoId.value, oldData).catch(() => {})
   }
-  // 加载目标拓扑
   currentTopoId.value = id
-  loadCurrentTopo()
+  await loadCurrentTopo()
 }
 
-function loadCurrentTopo() {
-  if (!graph) return
+async function loadCurrentTopo() {
+  if (!graph || !currentTopoId.value) return
   try {
-    const raw = localStorage.getItem(TOPO_DATA_PREFIX + currentTopoId.value)
-    if (raw) { graph.fromJSON(JSON.parse(raw)); return }
-  } catch {}
-  graph.clearCells()
+    const { data } = await getTopoData(currentTopoId.value)
+    if (data && data.cells && data.cells.length > 0) {
+      graph.fromJSON(data)
+    } else {
+      graph.clearCells()
+    }
+  } catch { graph.clearCells() }
 }
 
 function handleRenameTopo() {
   const item = topoList.value.find(t => t.id === currentTopoId.value)
   if (!item) return
-  const name = prompt('新名称:', item.name)
-  if (!name) return
-  item.name = name; saveTopoList()
-  ElMessage.success('已重命名')
+  ElMessageBox.prompt('请输入新名称', '重命名拓扑', {
+    confirmButtonText: '确定', cancelButtonText: '取消', inputValue: item.name,
+  }).then(async ({ value }) => {
+    const name = value?.trim(); if (!name) return
+    await renameTopo(currentTopoId.value, name)
+    item.name = name
+    ElMessage.success('已重命名')
+  }).catch(() => {})
 }
 
 function handleDeleteTopo() {
   if (topoList.value.length <= 1) { ElMessage.warning('至少保留一个拓扑'); return }
   const item = topoList.value.find(t => t.id === currentTopoId.value)
   if (!item) return
-  if (!confirm(`确定删除"${item.name}"？此操作不可撤销。`)) return
-  topoList.value = topoList.value.filter(t => t.id !== currentTopoId.value); saveTopoList()
-  localStorage.removeItem(TOPO_DATA_PREFIX + currentTopoId.value)
-  currentTopoId.value = topoList.value[0].id
-  loadCurrentTopo()
-  ElMessage.success('已删除')
+  ElMessageBox.confirm(`确定删除"${item.name}"？文件将被永久删除。`, '删除拓扑', {
+    confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning',
+  }).then(async () => {
+    await deleteTopo(currentTopoId.value)
+    topoList.value = topoList.value.filter(t => t.id !== currentTopoId.value)
+    currentTopoId.value = topoList.value[0].id
+    await loadCurrentTopo()
+    ElMessage.success('已删除')
+  }).catch(() => {})
 }
 
 let graph: Graph | null = null
@@ -386,6 +410,7 @@ Graph.registerNode(
               style: { cursor: 'crosshair' },
             },
           },
+          maximum: 0,
         },
         right: {
           position: 'right',
@@ -400,6 +425,7 @@ Graph.registerNode(
               style: { cursor: 'crosshair' },
             },
           },
+          maximum: 0,
         },
         bottom: {
           position: 'bottom',
@@ -414,6 +440,7 @@ Graph.registerNode(
               style: { cursor: 'crosshair' },
             },
           },
+          maximum: 0,
         },
         left: {
           position: 'left',
@@ -428,6 +455,7 @@ Graph.registerNode(
               style: { cursor: 'crosshair' },
             },
           },
+          maximum: 0,
         },
       },
       items: [
@@ -443,6 +471,7 @@ Graph.registerNode(
 
 onMounted(() => {
   initGraph()
+  initTopoList()
 })
 
 onBeforeUnmount(() => {
@@ -638,9 +667,6 @@ function initGraph() {
     openEdgeLabelEditor(edge)
   })
 
-  // 加载当前选中的拓扑
-  loadCurrentTopo()
-
   // 连线创建完成后自动提示编辑标签
   graph.on('edge:connected', ({ edge }) => {
     // 新连线创建后自动打开标签编辑
@@ -671,9 +697,6 @@ function initGraph() {
       node.setData({ ...data, hostname: newName.trim() })
     }
   })
-
-  // 初始化缩略图导航
-  initMiniMap()
 }
 
 // ─── 连线标签编辑函数 ──────────────────────────────────────
@@ -906,120 +929,6 @@ function handleGroupRename() {
     }
     groupRenameVisible.value = false
     editingGroupId.value = null
-}
-
-// ─── 缩略图导航 ────────────────────────────────────────────
-
-/** 初始化 MiniMap 缩略图（纯 Canvas 实现，兼容 X6 v3） */
-function initMiniMap() {
-    if (!graph || !canvasRef.value) return
-
-    const container = document.createElement('div')
-    container.className = 'x6-minimap-container'
-    container.style.cssText = `
-        position: absolute; bottom: 12px; right: 12px;
-        width: 180px; height: 130px;
-        border: 1px solid #dcdfe6; border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        background: #fff; overflow: hidden; z-index: 100;
-        cursor: pointer;
-    `
-    const canvas = document.createElement('canvas')
-    canvas.width = 180
-    canvas.height = 130
-    canvas.style.width = '180px'
-    canvas.style.height = '130px'
-    container.appendChild(canvas)
-
-    canvasRef.value.style.position = 'relative'
-    canvasRef.value.appendChild(container)
-
-    // 点击缩略图定位到对应位置
-    container.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect()
-        const x = (e.clientX - rect.left) / 180
-        const y = (e.clientY - rect.top) / 130
-        if (graph) {
-            const graphRect = graph.getGraphArea()
-            graph.centerPoint(
-                graphRect.x + graphRect.width * x,
-                graphRect.y + graphRect.height * y
-            )
-        }
-    })
-
-    // 更新缩略图
-    function updateMinimap() {
-        if (!graph) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-
-        ctx.clearRect(0, 0, 180, 130)
-
-        const graphArea = graph.getGraphArea()
-        if (graphArea.width === 0 || graphArea.height === 0) return
-
-        const scaleX = 170 / graphArea.width
-        const scaleY = 120 / graphArea.height
-        const scale = Math.min(scaleX, scaleY)
-
-        // 绘制分组节点（半透明虚线框）
-        for (const node of graph.getNodes()) {
-            const bbox = node.getBBox()
-            const x = (bbox.x - graphArea.x) * scale + 5
-            const y = (bbox.y - graphArea.y) * scale + 5
-            const w = bbox.width * scale
-            const h = bbox.height * scale
-
-            if (node.shape === 'group-node') {
-                ctx.strokeStyle = '#a0cfff'
-                ctx.lineWidth = 1
-                ctx.setLineDash([3, 2])
-                ctx.fillStyle = 'rgba(64,158,255,0.08)'
-                ctx.fillRect(x, y, w, h)
-                ctx.strokeRect(x, y, w, h)
-                ctx.setLineDash([])
-            } else {
-                // 设备节点用颜色方块表示
-                const data = node.getData() || {}
-                const colorMap: Record<string, string> = {
-                    'core-switch': '#409eff',
-                    'agg-switch': '#e6a23c',
-                    'access-switch': '#67c23a',
-                    'router': '#f56c6c',
-                    'firewall': '#f97316',
-                    'cloud': '#4a90d9',
-                }
-                ctx.fillStyle = colorMap[data.type] || '#909399'
-                ctx.fillRect(x, y, Math.max(w, 3), Math.max(h, 3))
-            }
-        }
-
-        // 画视口框
-        if (graphArea.width > 0) {
-            const vp = {
-                x: -graphArea.x * scale + 5,
-                y: -graphArea.y * scale + 5,
-                w: 170,
-                h: 120,
-            }
-            ctx.strokeStyle = '#409eff'
-            ctx.lineWidth = 1.5
-            ctx.setLineDash([])
-            ctx.strokeRect(
-                Math.max(vp.x, 5), Math.max(vp.y, 5),
-                Math.min(vp.w, 170), Math.min(vp.h, 120)
-            )
-        }
-    }
-
-    // 定时更新
-    updateMinimap()
-    setInterval(updateMinimap, 2000)
-    graph.on('node:move', updateMinimap)
-    graph.on('node:resize', updateMinimap)
-    graph.on('cell:added', () => setTimeout(updateMinimap, 100))
-    graph.on('cell:removed', () => setTimeout(updateMinimap, 100))
 }
 
 // ─── 自动布局 ──────────────────────────────────────────────
@@ -1278,22 +1187,48 @@ function handleClear() {
   ElMessage.success('画布已清空')
 }
 
-function handleSave() {
-  if (!graph) return
+async function handleSave() {
+  if (!graph || !currentTopoId.value) return
   const json = graph.toJSON()
-  localStorage.setItem(TOPO_DATA_PREFIX + currentTopoId.value, JSON.stringify(json))
-  ElMessage.success(`"${topoList.value.find(t=>t.id===currentTopoId.value)?.name}" 已保存`)
+  await saveTopoData(currentTopoId.value, json)
+  ElMessage.success(`"${topoList.value.find(t=>t.id===currentTopoId.value)?.name}" 已保存到服务器`)
 }
 
 function handleDownload() {
   if (!graph) return
   const json = graph.toJSON()
+  const name = topoList.value.find(t => t.id === currentTopoId.value)?.name || 'topology'
   const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url; a.download = `topology_${Date.now()}.json`; a.click()
+  a.href = url; a.download = `${name}_${new Date().toISOString().slice(0,10)}.json`; a.click()
   URL.revokeObjectURL(url)
-  ElMessage.success('JSON 文件已下载')
+  ElMessage.success('JSON 文件已下载到本地')
+}
+
+const fileInput = document.createElement('input')
+fileInput.type = 'file'; fileInput.accept = '.json'; fileInput.style.display = 'none'
+fileInput.onchange = async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file || !graph) return
+  const reader = new FileReader()
+  reader.onload = async (ev) => {
+    try {
+      const json = JSON.parse(ev.target?.result as string)
+      const result = await importTopo(json)
+      topoList.value.push({ id: result.id, name: result.name })
+      currentTopoId.value = result.id
+      graph?.fromJSON(json)
+      ElMessage.success(`已导入并新建方案: ${result.name}`)
+    } catch { ElMessage.error('JSON 格式无效，请检查文件') }
+  }
+  reader.readAsText(file)
+}
+document.body.appendChild(fileInput)
+
+function handleImportJson() {
+  if (!graph) return
+  fileInput.value = ''; fileInput.click()
 }
 
 function handleUndo() { graph?.undo() }
@@ -1364,16 +1299,6 @@ async function handleExportPng() {
   min-height: 300px;
   position: relative;
   overflow: hidden;
-}
-
-.canvas-wrapper :deep(.x6-minimap-container) {
-  position: absolute !important;
-  bottom: 12px !important;
-  right: 12px !important;
-}
-
-.canvas-wrapper :deep(.x6-minimap-container .x6-minimap-viewport) {
-  border: 2px solid #409eff !important;
 }
 
 /* 连线编辑弹窗中的设备归属条 */

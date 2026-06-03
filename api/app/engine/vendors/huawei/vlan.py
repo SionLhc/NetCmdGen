@@ -164,11 +164,119 @@ class VLANConfigGenerator:
                 ))
         
         if "stp" in config:
+            stp_conf = config["stp"]
             config_lines.append("\n#\n# STP配置\n#\n")
             config_lines.append(VLANConfigGenerator.generate_stp_config(
-                config["stp"].get("mode", "stp"),
-                config["stp"].get("priority", 32768),
-                config["stp"].get("enable", True)
+                stp_conf.get("mode", "mstp"),
+                stp_conf.get("priority", 32768),
+                stp_conf.get("enable", True)
             ))
+            # MSTP 域配置
+            if stp_conf.get("mode") == "mstp" and stp_conf.get("mstp_domain"):
+                md = stp_conf["mstp_domain"]
+                config_lines.append(f"stp region-configuration\n")
+                config_lines.append(f" region-name {md.get('region_name', 'default')}\n")
+                config_lines.append(f" revision-level {md.get('revision_level', 0)}\n")
+                for inst in md.get("instances", []):
+                    iid = inst.get("instance_id", 0)
+                    vlans = inst.get("vlans", "1")
+                    config_lines.append(f" instance {iid} vlan {vlans}\n")
+                config_lines.append(f" active region-configuration\n")
+                config_lines.append(f"# 验证: display stp region-configuration\n")
+                config_lines.append(f"# 回滚: undo stp region-configuration\n")
+                config_lines.append("#\n")
+            # 接口级 STP 优化
+            for iface in stp_conf.get("stp_interfaces", []):
+                ifname = iface.get("interface", "GigabitEthernet0/0/1")
+                config_lines.append(f"interface {ifname}\n")
+                if iface.get("edge_port"):
+                    config_lines.append(f" stp edged-port enable\n")
+                    config_lines.append(f"# 边缘端口：直连终端，跳过STP计算，快速进入转发\n")
+                if iface.get("bpdu_protection"):
+                    config_lines.append(f" stp bpdu-protection\n")
+                    config_lines.append(f"# BPDU保护：收到BPDU自动shutdown，防止环路\n")
+                if iface.get("root_protection"):
+                    config_lines.append(f" stp root-protection\n")
+                    config_lines.append(f"# 根保护：防止更优BPDU抢走根桥角色\n")
+                config_lines.append(f"# 验证: display stp interface {ifname}\n")
+                config_lines.append(f"# 回滚: undo stp edged-port / undo stp bpdu-protection\n")
+                config_lines.append("#\n")
+
+        # 端口镜像
+        if "port_mirror" in config:
+            config_lines.append("\n#\n# 端口镜像配置\n#\n")
+            for pm in config["port_mirror"]:
+                src = pm.get("source_interface", "GigabitEthernet0/0/1")
+                dst = pm.get("observe_interface", "GigabitEthernet0/0/24")
+                dir_ = pm.get("direction", "both")
+                config_lines.append(f"observe-port 1 interface {dst}\n")
+                config_lines.append(f"# 观察口：流量拷贝到此口接分析设备\n")
+                config_lines.append(f"interface {src}\n")
+                config_lines.append(f" port-mirroring to observe-port 1 {dir_}\n")
+                config_lines.append(f"# 镜像方向: {dir_} (both=收发/inbound=入/outbound=出)\n")
+                config_lines.append(f"# 验证: display port-mirroring\n")
+                config_lines.append(f"# 回滚: undo port-mirroring to observe-port 1\n")
+                config_lines.append("#\n")
+
+        # 堆叠/集群（iStack/CSS）
+        if "stack" in config:
+            config_lines.append("\n#\n# 堆叠/集群配置\n#\n")
+            sc = config["stack"]
+            if sc.get("mode") == "css":
+                config_lines.append(f"# CSS 集群（高端框式 V200R002+）\n")
+                config_lines.append(f"css enable\n")
+                config_lines.append(f"set css mode {sc.get('css_mode', 'lpu')}\n")
+                config_lines.append(f"set css id {sc.get('css_id', 1)}\n")
+                config_lines.append(f"set css priority {sc.get('css_priority', 100)}\n")
+                config_lines.append(f"# 验证: display css status\n")
+                config_lines.append(f"# 回滚: undo css enable\n")
+            elif sc.get("mode") == "istack":
+                config_lines.append(f"# iStack 堆叠（盒式 S系列）\n")
+                config_lines.append(f"stack enable\n")
+                if sc.get("domain"):
+                    config_lines.append(f"stack domain {sc['domain']}\n")
+                if sc.get("slot_id"):
+                    config_lines.append(f"stack slot {sc['slot_id']} priority {sc.get('priority', 100)}\n")
+                for port in sc.get("stack_ports", []):
+                    config_lines.append(f"interface stack-port {port.get('id', '0/1')}\n")
+                    for mem in port.get("members", []):
+                        config_lines.append(f" port member-group interface {mem}\n")
+                    config_lines.append("#\n")
+                config_lines.append(f"# 保存后重启生效\n")
+                config_lines.append(f"# 验证: display stack\n")
+                config_lines.append(f"# 回滚: undo stack enable\n")
+            config_lines.append("#\n")
+
+        # LACP/链路聚合
+        if "lacp" in config:
+            config_lines.append("\n#\n# 链路聚合/Eth-Trunk配置\n#\n")
+            for trunk in config["lacp"]:
+                tid = trunk.get("trunk_id", 1)
+                mode = trunk.get("mode", "static")
+                members = trunk.get("members", [])
+                config_lines.append(f"interface Eth-Trunk{tid}\n")
+                config_lines.append(f" description {trunk.get('description', 'LACP汇聚')}\n")
+                if mode == "lacp":
+                    config_lines.append(f" mode lacp-static\n")
+                    config_lines.append(f"# 动态LACP：自动协商，IEEE 802.3ad标准\n")
+                    if trunk.get("lacp_priority"):
+                        config_lines.append(f" lacp priority {trunk['lacp_priority']}\n")
+                    if trunk.get("max_active"):
+                        config_lines.append(f" max active-linknumber {trunk['max_active']}\n")
+                        config_lines.append(f"# 最大活跃链路数（M:N备份）\n")
+                    if trunk.get("min_active"):
+                        config_lines.append(f" least active-linknumber {trunk['min_active']}\n")
+                        config_lines.append(f"# 最小活跃链路数（低于此值聚合口down）\n")
+                else:
+                    config_lines.append(f" mode manual load-balance\n")
+                    config_lines.append(f"# 静态LACP：手动指定，不协商\n")
+                for mem in members:
+                    config_lines.append(f"interface {mem}\n")
+                    config_lines.append(f" eth-trunk {tid}\n")
+                    config_lines.append(f"#\n")
+                config_lines.append(f"# 验证: display eth-trunk {tid}\n")
+                config_lines.append(f"# 验证: display interface Eth-Trunk{tid}\n")
+                config_lines.append(f"# 回滚: undo interface Eth-Trunk{tid}\n")
+                config_lines.append("#\n")
         
         return "".join(config_lines)

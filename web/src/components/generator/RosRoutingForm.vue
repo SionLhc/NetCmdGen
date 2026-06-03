@@ -84,9 +84,7 @@
           <el-input v-model="r.gateway" size="small" placeholder="下一跳" />
         </el-col>
         <el-col :span="4">
-          <el-select v-model="r.routingMark" size="small" style="width:100%" clearable placeholder="路由标记">
-            <el-option v-for="w in form.pccWans" :key="w.routingMark" :label="w.routingMark" :value="w.routingMark" />
-          </el-select>
+          <el-input v-model="r.routingMark" size="small" placeholder="路由标签（必填）" />
         </el-col>
         <el-col :span="3">
           <el-input v-model="r.comment" size="small" placeholder="备注" />
@@ -132,9 +130,7 @@
       <el-row :gutter="4" align="middle">
         <el-col :span="6"><el-input v-model="pr.srcAddr" size="small" placeholder="源IP/网段" /></el-col>
         <el-col :span="5"><el-input v-model="pr.dstAddr" size="small" placeholder="目标IP/网段" /></el-col>
-        <el-col :span="4"><el-select v-model="pr.routingMark" size="small" style="width:100%" placeholder="标记">
-          <el-option v-for="w in form.pccWans" :key="w.routingMark" :label="w.routingMark" :value="w.routingMark" />
-        </el-select></el-col>
+        <el-col :span="4"><el-input v-model="pr.routingMark" size="small" placeholder="路由标签（必填）" /></el-col>
         <el-col :span="4"><el-input v-model="pr.gateway" size="small" placeholder="指定网关" /></el-col>
         <el-col :span="4"><el-input v-model="pr.comment" size="small" placeholder="备注" /></el-col>
         <el-col :span="1"><el-button text type="danger" size="small" @click="form.policyRoutes.splice(pi,1);emitUpdate()">✕</el-button></el-col>

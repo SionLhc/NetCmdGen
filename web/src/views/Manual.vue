@@ -9,6 +9,9 @@
           <el-option label="锐捷 Ruijie" value="ruijie" />
           <el-option label="迈普 Maipu" value="maipu" />
           <el-option label="RouterOS" value="routeros" />
+          <el-option label="Cisco" value="cisco" />
+          <el-option label="TP-LINK" value="tplink" />
+          <el-option label="Juniper" value="juniper" />
         </el-select>
         <el-select v-model="version" placeholder="版本" style="width: 150px" @change="loadManual">
           <el-option v-for="v in versionList" :key="v.code" :label="v.name" :value="v.code" />

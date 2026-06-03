@@ -1,40 +1,5 @@
 <template>
   <div class="router-wan">
-    <!-- 设备型号选择（醒目放在第一行） -->
-    <div v-if="props.vendor" style="background:#f0f7ff;border:1px solid #b3d8ff;border-radius:8px;padding:12px 16px;margin-bottom:12px">
-      <div style="font-size:12px;color:#337ecc;margin-bottom:4px">📋 选择你的设备型号（确保命令100%兼容）</div>
-      <el-select
-        :model-value="deviceModel"
-        @update:model-value="onModelChange"
-        filterable
-        placeholder="选设备型号（可搜索）"
-        size="default"
-        style="width:300px"
-      >
-        <el-option-group v-for="g in deviceModelOptions" :key="g.label" :label="g.label">
-          <el-option v-for="m in g.options" :key="m.value" :label="m.label" :value="m.value" />
-        </el-option-group>
-      </el-select>
-      <span v-if="!deviceModel" style="color:#e6a23c;font-size:12px;margin-left:12px">⚠ 未选择型号 — 生成命令为通用版本</span>
-      <span v-else style="color:#67c23a;font-size:12px;margin-left:12px">✅ {{ deviceModel }}</span>
-    </div>
-
-    <!-- Web 配置引导（针对不支持命令行的低端设备） -->
-    <el-alert v-if="isWebOnly" type="warning" :closable="false" show-icon style="margin-bottom:12px">
-      <template #title>⚠ 该型号不支持命令行配置</template>
-      <div style="font-size:12px;line-height:1.6">
-        <strong>{{ deviceModel }}</strong> 为入门级设备，仅支持 Web 管理界面配置。
-        请参考以下步骤：
-        <ol style="margin:4px 0;padding-left:20px">
-          <li>电脑连接设备 LAN 口，获取自动 IP（默认 192.168.1.x）</li>
-          <li>浏览器打开 <code>https://192.168.1.1</code>（华为/H3C 默认管理 IP）</li>
-          <li>默认用户名 <b>admin</b>，默认密码见设备底部贴纸</li>
-          <li>进入「网络设置 → WAN口」选择上网方式填入账号</li>
-        </ol>
-        <span style="color:#e6a23c">建议升级为 AR2200 或更高型号以获得命令行支持</span>
-      </div>
-    </el-alert>
-
     <!-- 顶部引导 -->
     <el-alert type="success" :closable="false" show-icon style="margin-bottom:16px">
       <template #title>📖 每条宽带线路独立配置</template>
@@ -160,43 +125,6 @@ const vendorName = computed(() => {
   return m[vendor.value] || vendor.value
 })
 
-// ─── 设备型号选择 ─────────────────────────────────
-const deviceModel = ref(props.modelValue?.device_model || '')
-
-const deviceModelOptions = computed(() => {
-  const m: Record<string, {label:string, options:{label:string;value:string}[]}[]> = {
-    huawei: [
-      { label:'AR 企业路由器', options:[
-        {label:'AR1200 系列（中小分支）',value:'AR1200'},{label:'AR2200/AR3200 系列（方案推荐★）',value:'AR2200'},
-        {label:'AR6300 系列（高性能）',value:'AR6300'},{label:'NE 系列（运营商级）',value:'NE'}]},
-    ],
-    h3c: [
-      { label:'MSR 路由器', options:[
-        {label:'MSR 2600/3600 系列',value:'MSR2600'},{label:'MSR 5600 系列（方案推荐★）',value:'MSR5600'}]},
-    ],
-    ruijie: [
-      { label:'RSR 路由器', options:[
-        {label:'RSR10/20 系列',value:'RSR10'},{label:'RSR30/50 系列（方案推荐★）',value:'RSR30'},{label:'RSR77 系列',value:'RSR77'}]},
-    ],
-    maipu: [
-      { label:'MP 路由器', options:[
-        {label:'MP1800/2800 系列',value:'MP1800'},{label:'MP3800/4800 系列（方案推荐★）',value:'MP3800'}]},
-    ],
-  }
-  return m[props.vendor || ''] || []
-})
-
-function onModelChange(val: string) {
-  deviceModel.value = val
-  emitUpdate()
-}
-
-// 不带配置命令的设备型号（如低端家用路由器）
-const isWebOnly = computed(() => {
-  const webOnlyModels = ['AR1200','RSR10','MP1800']
-  return webOnlyModels.includes(deviceModel.value)
-})
-
 // ─── 每条线路独立结构 ────────────────────────────
 interface WanLine {
   connectionType: 'pppoe' | 'static' | 'dhcp'
@@ -295,7 +223,6 @@ function emitUpdate() {
   emit('update:modelValue', {
     wanLines: wanLines.map(l => ({ ...l })),
     natEnabled: natEnabled.value,
-    device_model: deviceModel.value,
   })
 }
 

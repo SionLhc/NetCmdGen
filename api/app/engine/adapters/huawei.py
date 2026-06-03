@@ -18,6 +18,7 @@ from app.engine.vendors.huawei.security import SecurityConfigGenerator
 from app.engine.vendors.huawei.interface import InterfaceConfigGenerator
 from app.engine.vendors.huawei.qos import QoSConfigGenerator
 from app.engine.vendors.huawei.wan import HuaweiWanGenerator
+from app.engine.vendors.huawei_firewall import HuaweiFirewallGenerator
 from app.engine.vendors.huawei.version_config import VrpVersion
 
 
@@ -144,18 +145,29 @@ class HuaweiAdapter:
             "#\n",
         ]
 
-        for key in ("basic", "vlan", "routing", "security", "interface", "qos", "wan"):
+        for key in ("basic", "vlan", "routing", "security", "interface", "qos", "wan", "firewall", "dhcp", "nat", "acl", "ipv6", "wireless"):
             if key in config:
                 if key == "basic":
                     sections.append(
                         BasicConfigGenerator.generate_basic_all(config[key], version)
                     )
                 elif key == "security":
-                    # 安全配置（ACL语法区分版本）
                     sections.append(self._gen_security(config[key], version))
                 elif key == "wan":
-                    # WAN / PPPoE / NAT 路由器专属配置
                     sections.append(HuaweiWanGenerator.generate_wan_all(config[key]))
+                elif key in ("dhcp", "nat"):
+                    # DHCP服务/NAT端口映射 → 追加到WAN已有逻辑或单独输出
+                    sections.append(f"\n# {'DHCP服务' if key == 'dhcp' else 'NAT端口映射'}配置\n" +
+                                    HuaweiWanGenerator.generate_wan_all(config[key]))
+                elif key == "acl":
+                    sections.append(f"\n# ACL访问控制\n" +
+                                    SecurityConfigGenerator.generate_security_all(config[key], version))
+                elif key == "ipv6":
+                    sections.append(HuaweiWanGenerator.generate_ipv6(config[key]))
+                elif key == "wireless":
+                    sections.append(HuaweiWanGenerator.generate_wireless(config[key]))
+                elif key == "firewall":
+                    sections.append(HuaweiFirewallGenerator.generate_all(config[key]))
                 else:
                     sections.append(self.generate(key, config[key]))
 

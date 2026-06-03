@@ -13,6 +13,9 @@ from app.engine.adapters.huawei import HuaweiAdapter
 from app.engine.adapters.maipu import MaipuAdapter
 from app.engine.adapters.ruijie import RuijieAdapter
 from app.engine.adapters.routeros import RouterOSAdapter
+from app.engine.adapters.cisco import CiscoAdapter
+from app.engine.adapters.tplink import TPLinkAdapter
+from app.engine.adapters.juniper import JuniperAdapter
 from app.engine.base import VendorAdapter, VendorNotSupported
 
 # 单例字典；Adapter 都是无状态对象，复用安全
@@ -22,6 +25,9 @@ _ADAPTERS: Dict[str, VendorAdapter] = {
     RuijieAdapter.vendor_code: RuijieAdapter(),
     MaipuAdapter.vendor_code: MaipuAdapter(),
     RouterOSAdapter.vendor_code: RouterOSAdapter(),
+    CiscoAdapter.vendor_code: CiscoAdapter(),
+    TPLinkAdapter.vendor_code: TPLinkAdapter(),
+    JuniperAdapter.vendor_code: JuniperAdapter(),
 }
 
 

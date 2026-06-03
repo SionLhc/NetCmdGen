@@ -24,6 +24,11 @@ const router = createRouter({
       component: () => import('@/views/Tools.vue'),
     },
     {
+      path: '/diagnostics',
+      name: 'Diagnostics',
+      component: () => import('@/views/Diagnostics.vue'),
+    },
+    {
       path: '/manual',
       name: 'Manual',
       component: () => import('@/views/Manual.vue'),

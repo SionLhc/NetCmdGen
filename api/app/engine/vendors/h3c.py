@@ -219,14 +219,93 @@ class H3CConfigGenerator:
         
         if config.get("stp"):
             stp_config = config["stp"]
-            if stp_config.get("enable"):
-                lines.append("\n# STP配置")
-                mode = stp_config.get("mode", "rstp")
-                priority = stp_config.get("priority", 32768)
-                
-                lines.append(f"stp mode {mode}")
-                lines.append(f"stp priority {priority}")
-                lines.append("stp enable")
+            lines.append("\n# ==================== 生成树配置 ====================")
+            mode = stp_config.get("mode", "mstp")
+            priority = stp_config.get("priority", 32768)
+            lines.append(f"stp mode {mode}")
+            lines.append(f"stp priority {priority}")
+            if stp_config.get("enable", True):
+                lines.append("stp global enable")
+            # MSTP 域配置
+            if mode == "mstp" and stp_config.get("mstp_domain"):
+                md = stp_config["mstp_domain"]
+                lines.append(f"stp region-configuration")
+                lines.append(f" region-name {md.get('region_name', 'default')}")
+                lines.append(f" revision-level {md.get('revision_level', 0)}")
+                for inst in md.get("instances", []):
+                    iid = inst.get("instance_id", 0)
+                    vlans = inst.get("vlans", "1")
+                    lines.append(f" instance {iid} vlan {vlans}")
+                lines.append(f" active region-configuration")
+            # 接口级 STP 优化
+            for iface in stp_config.get("stp_interfaces", []):
+                ifname = iface.get("interface", "GigabitEthernet1/0/1")
+                lines.append(f"interface {ifname}")
+                if iface.get("edge_port"):
+                    lines.append(f" stp edged-port")
+                    lines.append(f"# 边缘端口：直连终端，跳过STP计算")
+                if iface.get("bpdu_protection"):
+                    lines.append(f" stp bpdu-protection")
+                    lines.append(f"# BPDU保护：收到BPDU自动shutdown")
+                if iface.get("root_protection"):
+                    lines.append(f" stp root-protection")
+                    lines.append(f"# 根保护：防止更优BPDU抢根桥")
+                lines.append(" quit")
+            lines.append(f"# 验证: display stp brief")
+            lines.append(f"# 验证: display stp region-configuration")
+            lines.append(f"# 回滚: undo stp global enable")
+
+        # LACP/链路聚合
+        if config.get("lacp"):
+            lines.append("\n# ==================== 链路聚合 ====================")
+            for trunk in config["lacp"]:
+                tid = trunk.get("trunk_id", 1)
+                mode = trunk.get("mode", "static")
+                members = trunk.get("members", [])
+                lines.append(f"interface Bridge-Aggregation{tid}")
+                lines.append(f" description {trunk.get('description', 'LACP汇聚')}")
+                lines.append(f" link-aggregation mode {'dynamic' if mode=='lacp' else 'static'}")
+                if trunk.get("max_active"):
+                    lines.append(f" link-aggregation selected-port maximum {trunk['max_active']}")
+                    lines.append(f"# 最大活跃链路数")
+                if trunk.get("min_active"):
+                    lines.append(f" link-aggregation selected-port minimum {trunk['min_active']}")
+                    lines.append(f"# 最小活跃链路数（低于此值聚合口down）")
+                lines.append(" quit")
+                for mem in members:
+                    lines.append(f"interface {mem}")
+                    lines.append(f" port link-aggregation group {tid}")
+                    lines.append(" quit")
+                lines.append(f"# 验证: display link-aggregation verbose")
+                lines.append(f"# 回滚: undo interface Bridge-Aggregation{tid}")
+
+        # 端口镜像
+        if config.get("port_mirror"):
+            lines.append("\n# ==================== 端口镜像 ====================")
+            for pm in config["port_mirror"]:
+                src = pm.get("source_interface", "GigabitEthernet1/0/1")
+                dst = pm.get("observe_interface", "GigabitEthernet1/0/24")
+                dir_ = pm.get("direction", "both")
+                lines.append(f"mirroring-group 1 local")
+                lines.append(f"mirroring-group 1 monitor-port {dst}")
+                lines.append(f"mirroring-group 1 mirroring-port {src} {dir_}")
+                lines.append(f"# 镜像方向: {dir_}")
+                lines.append(f"# 验证: display mirroring-group all")
+                lines.append(f"# 回滚: undo mirroring-group 1")
+
+        # IRF 堆叠
+        if config.get("stack"):
+            lines.append("\n# ==================== IRF堆叠 ====================")
+            sc = config["stack"]
+            lines.append(f"irf member {sc.get('member_id', 1)} priority {sc.get('priority', 1)}")
+            for port in sc.get("irf_ports", []):
+                lines.append(f"irf-port {port.get('id', '1/1')}")
+                lines.append(f" port group interface {port.get('interface', 'Ten-GigabitEthernet1/0/49')}")
+                lines.append(" quit")
+            lines.append(f"irf-port-configuration active")
+            lines.append(f"# 保存后重启生效")
+            lines.append(f"# 验证: display irf")
+            lines.append(f"# 回滚: undo irf member")
         
         return "\n".join(lines)
     
@@ -434,6 +513,35 @@ class H3CConfigGenerator:
                         if ip and mac:
                             lines.append(f"arp static {ip} {mac} {interface}")
         
+        # DAI 动态 ARP 检测
+        if config.get("arp_detection"):
+            ad = config["arp_detection"]
+            lines.append("\n# DAI 动态ARP检测")
+            for v in (ad.get("vlans") or []): lines.append(f"arp detection vlan {v}")
+            lines.append("arp detection validate src-mac dst-mac ip")
+            for port in (ad.get("trusted_ports") or []):
+                lines.append(f"interface {port}"); lines.append(" arp detection trust"); lines.append("#")
+
+        # IP Source Guard
+        if config.get("ip_source_guard"):
+            isg = config["ip_source_guard"]
+            lines.append("\n# IP Source Guard")
+            for port in (isg.get("ports") or []):
+                lines.append(f"interface {port}")
+                lines.append(" ip verify source ip-address mac-address")
+                lines.append("#")
+
+        if config.get("storm_control"):
+            sc = config["storm_control"]
+            lines.append("\n# 风暴控制")
+            for port in (sc.get("ports") or []):
+                lines.extend([f"interface {port}",f" broadcast-suppression pps {sc.get('broadcast_pps',1000)}",f" multicast-suppression pps {sc.get('multicast_pps',1000)}","#"])
+
+        if config.get("ipsec"):
+            ipsec = config["ipsec"]
+            lines.append("\n# IPSec VPN")
+            lines.extend(["ike proposal 1"," encryption-algorithm aes-cbc-256"," dh group14"," authentication-algorithm sha256","ike peer vpn-peer"," pre-shared-key cipher "+ipsec.get("pre_shared_key","vpn-key")," remote-address "+ipsec.get("peer_ip","1.2.3.4"),"ipsec transform-set TS"," esp encryption-algorithm aes-cbc-256"," esp authentication-algorithm sha256","acl advanced 3000"," rule 5 permit ip source "+ipsec.get("local_net","192.168.1.0")+" 0.0.0.255 destination "+ipsec.get("remote_net","192.168.2.0")+" 0.0.0.255","ipsec policy vpn-policy 10 isakmp"," transform-set TS"," security acl 3000"," ike-peer vpn-peer"])
+
         return "\n".join(lines)
     
     @staticmethod
@@ -691,6 +799,31 @@ class H3CConfigGenerator:
         if config.get("service"):
             sections.append(H3CConfigGenerator.generate_service_config(config["service"]))
 
+        if config.get("gre"):
+            gre = config["gre"]
+            sections.append("\n# GRE隧道\ninterface Tunnel0\n ip address "+gre.get("tunnel_ip","10.0.0.1")+" "+gre.get("tunnel_mask","255.255.255.0")+"\n tunnel-protocol gre\n source "+gre.get("source","GigabitEthernet0/0")+"\n destination "+gre.get("destination","2.2.2.2")+"\n#")
+
+        if config.get("ipv6"):
+            sections.append(H3CConfigGenerator.generate_ipv6_config(config["ipv6"]))
+
         sections.append("\n\nreturn")
 
         return "\n".join(sections)
+
+    @staticmethod
+    def generate_ipv6_config(params: Dict[str, Any]) -> str:
+        """生成 H3C IPv6 配置"""
+        out = ["\n# H3C IPv6 配置", "ipv6"]
+        for iface in (params.get("interfaces") or []):
+            port = iface.get("interface", "GigabitEthernet0/0/1")
+            addr = iface.get("ipv6_address", "")
+            if addr:
+                out.append(f"interface {port}")
+                out.append(" ipv6 enable")
+                out.append(f" ipv6 address {addr}")
+                if iface.get("ipv6_ra", True):
+                    out.append(" ipv6 nd ra")
+                out.append("#")
+        for r in (params.get("ipv6_routes") or []):
+            out.append(f"ipv6 route-static {r.get('dest','::/0')} {r.get('nexthop','')}")
+        return "\n".join(out)

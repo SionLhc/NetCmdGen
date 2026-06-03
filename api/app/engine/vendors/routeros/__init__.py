@@ -223,6 +223,9 @@ class RouterOSConfigGenerator:
                 area = net.get("area", "0.0.0.0")
                 if addr:
                     lines.append(get_cmd(version, "ospf_network", net=addr, area=area))
+        # ── 策略路由（国内外分流/设备分流/应用分流）──
+        if config.get("cnRoute", {}).get("enabled") or config.get("deviceRoutes") or config.get("appRoutes"):
+            lines.append(RouterOSConfigGenerator.generate_policy_routes(config, version))
         return "\n".join(lines)
 
     @staticmethod
@@ -268,13 +271,18 @@ class RouterOSConfigGenerator:
                 port = rule.get("port", 22)
                 lines.append(get_cmd(version, "filter_rule",
                     chain=chain, action=action, proto=proto, port=port))
-        # DNAT 端口映射
+        # DNAT 端口映射（公网IP → 内网IP:端口）
         dnat_rules = config.get("dnatRules", [])
         for dnat in dnat_rules:
             if dnat.get("publicPort") and dnat.get("internalIp"):
-                lines.append(f"/ip firewall nat add chain=dstnat dst-port={dnat['publicPort']} "
-                           f"protocol=tcp action=dst-nat to-addresses={dnat['internalIp']} "
-                           f"to-ports={dnat.get('internalPort', dnat['publicPort'])}")
+                # 公网IP：有则指定，无则匹配所有（留空=匹配任意目标IP）
+                dst_addr = dnat.get("publicIp", "")
+                addr_clause = f" dst-address={dst_addr}" if dst_addr else ""
+                lines.append(f"/ip firewall nat add chain=dstnat{addr_clause}"
+                           f" protocol={dnat.get('protocol','tcp')} dst-port={dnat['publicPort']}"
+                           f" action=dst-nat to-addresses={dnat['internalIp']}"
+                           f" to-ports={dnat.get('internalPort', dnat['publicPort'])}"
+                           f"{' comment=\"' + dnat['description'] + '\"' if dnat.get('description') else ''}")
         # WireGuard (V7)
         if config.get("wireguard", False) and version == RouterOSVersion.V7:
             lines.append("# WireGuard VPN (V7)")
@@ -357,15 +365,9 @@ class RouterOSConfigGenerator:
             lines.append(f"# 每IP限速: {per_ip_limit}")
         lines.append("")
 
-        # === 第一步：Mangle 标记 ===
+        # 所有版本 CLI 均用空格分隔
         lines.append("# --- 1. Mangle 防火墙标记 ---")
-
-        if version == RouterOSVersion.V7:
-            # RouterOS V7 语法：/ip/firewall/mangle
-            mangle_prefix = "/ip/firewall/mangle"
-        else:
-            # RouterOS V6 语法：/ip firewall mangle
-            mangle_prefix = "/ip firewall mangle"
+        mangle_prefix = "/ip firewall mangle"
 
         # ── 标记下载（prerouting，流量进入 WAN 口时标记）──
         lines.append(f"# 标记下载连接（流量从 WAN 入）")
@@ -509,8 +511,9 @@ class RouterOSConfigGenerator:
         用户只需选择场景，系统自动生成 Mangle + Route 标记 + 地址列表。
         """
         lines = ["# === 策略路由 / 分流 ===", ""]
-        mangle_prefix = "/ip/firewall/mangle" if version == RouterOSVersion.V7 else "/ip firewall mangle"
-        route_prefix = "/ip/route" if version == RouterOSVersion.V7 else "/ip route"
+        # ROS CLI 始终用空格分隔，V6/V7 语法一致
+        mangle_prefix = "/ip firewall mangle"
+        route_prefix = "/ip route"
 
         # ─── 场景1：国内外分流 ──────────────────
         cn_route = config.get("cnRoute", {})
@@ -518,22 +521,32 @@ class RouterOSConfigGenerator:
             cn_wan = cn_route.get("cnWan", "ether1")
             intl_wan = cn_route.get("intlWan", "ether2")
 
+
             lines.append("# --- 国内外智能分流 ---")
-            lines.append(f"# 国内网站 → {cn_wan} · 国外网站 → {intl_wan}")
+            lines.append(f"# 逻辑：目的IP在中��IP列表 → 走国内线路({cn_wan})")
+            lines.append(f"#       目的IP不在中国IP列表 → 走海外线路({intl_wan})，不标记=默认路由")
+            lines.append(f"# DNAT不在此处配置，如需外网访问内网服务器请到NAT/防火墙标签页")
             lines.append("")
 
-            # 1. 创建中国 IP 地址列表（MikroTik CLI 自带 cn-ip-list）
-            lines.append("# 注：需先导入中国 IP 地址列表")
-            lines.append("# 推荐使用在线生成的 CN IP 列表：https://github.com/17mon/china_ip_list")
-            lines.append("# 导入命令：/tool fetch url=... mode=http dst-path=china.rsc")
-            lines.append("# 或手动添加（示例：电信DNS + 百度DNS）：")
-            lines.append(f"{mangle_prefix} add chain=prerouting dst-address-list=CN-IP action=mark-routing new-routing-mark=cn-route passthrough=no comment=国内分流")
+            # 1. 前提：导入中国IP地址列表
+            lines.append("# 注：需先导入中国 IP 地址列表 /ip firewall address-list")
+            lines.append("# 推荐：https://github.com/17mon/china_ip_list 生成导入脚本")
+            lines.append("# 示例导入：/import china-ip.rsc")
             lines.append("")
 
-            # 2. 非中国IP走海外线路（执行"否"操作）
-            lines.append("# 非中国 IP（国外/海外）走默认路由")
-            lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{cn_wan}] gateway) routing-mark=cn-route comment=国内默认路由-{cn_wan}")
-            lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{intl_wan}] gateway) comment=海外默认路由-{intl_wan}")
+            # 2. Mangle：匹配目的地址在 CN-IP 列表 → 打标记 cn-route
+            lines.append("# 2. Mangle 标记：命中中国IP → routing-mark=cn-route")
+            lines.append(f"/ip firewall mangle add chain=prerouting dst-address-list=CN-IP \\")
+            lines.append(f"    action=mark-routing new-routing-mark=cn-route passthrough=no \\")
+            lines.append(f"    comment=\"国内分流→{cn_wan}\"")
+            lines.append("")
+
+            # 3. 路由：cn-route 标记 → 国内线路 / 默认（未标记）→ 海外线路
+            lines.append("# 3. 路由表：标记流量走国内线，其余走海外线")
+            lines.append(f"/ip route add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{cn_wan}] gateway) \\")
+            lines.append(f"    routing-mark=cn-route distance=1 comment=\"国内默认路由\"")
+            lines.append(f"/ip route add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{intl_wan}] gateway) \\")
+            lines.append(f"    distance=2 check-gateway=ping comment=\"海外默认路由（保活）\"")
             lines.append("")
 
         # ─── 场景2：指定设备走指定WAN ────────────
@@ -544,6 +557,7 @@ class RouterOSConfigGenerator:
                 src = dr.get("srcAddr", "").strip()
                 wan = dr.get("wanInterface", "").strip()
                 comment = dr.get("comment", f"规则{i+1}") or f"规则{i+1}"
+                srcNatIp = dr.get("srcNatIp", "").strip()
                 if not src or not wan:
                     continue
                 # Mangle 标记
@@ -555,7 +569,11 @@ class RouterOSConfigGenerator:
                     lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 routing-table={tag} gateway=$(/ip dhcp-client get [{wan}] gateway) comment=\"{comment}-RT\"")
                 else:
                     lines.append(f"{route_prefix} add dst-address=0.0.0.0/0 gateway=$(/ip dhcp-client get [{wan}] gateway) routing-mark={tag} comment=\"{comment}-RT\"")
-            lines.append("")
+                # SNAT：多公网IP时指定出口IP（非masquerade自选）
+                if srcNatIp:
+                    lines.append(f"/ip firewall nat add chain=srcnat src-address={src} action=src-nat to-addresses={srcNatIp} out-interface={wan} comment=\"{comment}-SNAT\"")
+                    lines.append(f"# → 该设备出站使用公网IP {srcNatIp}")
+                lines.append("")
 
         # ─── 场景3：应用分流 ──────────────────
         app_routes = config.get("appRoutes", [])
@@ -584,6 +602,114 @@ class RouterOSConfigGenerator:
             lines.append("")
 
         return "\n".join(lines).strip() and "\n".join(lines)
+
+    # ─── DHCP 服务 ─────────────────────────────────
+
+    @staticmethod
+    def _generate_dhcp(params: Dict[str, Any],
+                       version: RouterOSVersion = RouterOSVersion.V6) -> str:
+        """生成 RouterOS DHCP Server 配置"""
+        lines = ["\n# === DHCP 服务 ===", "/ip pool"]
+        # 地址池
+        pools = []
+        for dhcp in (params.get("dhcpLines") or params.get("lines") or []):
+            pool_name = f"dhcp_pool_{len(pools)+1}"
+            net = dhcp.get("network", "192.168.88.0")
+            mask_bits = dhcp.get("mask", "24")
+            start_ip = dhcp.get("rangeStart") or dhcp.get("startIp", "")
+            end_ip = dhcp.get("rangeEnd") or dhcp.get("endIp", "")
+            pools.append({
+                "name": pool_name, "interface": dhcp.get("interface", "bridge1"),
+                "network": net, "mask": mask_bits, "gateway": dhcp.get("gateway", ""),
+                "dns": dhcp.get("dns", "8.8.8.8"), "range": f"{start_ip}-{end_ip}" if start_ip else "",
+                "lease": dhcp.get("lease", "1d"), "staticBindings": dhcp.get("staticBindings", ""),
+            })
+        for p in pools:
+            if p["range"]:
+                lines.append(f"add name={p['name']} ranges={p['range']}")
+        lines.append("")
+        # DHCP Server 实例
+        lines.append("/ip dhcp-server")
+        for p in pools:
+            lines.append(f"add name=dhcp_{p['interface']} interface={p['interface']} address-pool={p['name']} disabled=no")
+        lines.append("")
+        # DHCP 网络配置
+        lines.append("/ip dhcp-server network")
+        for p in pools:
+            net_addr = p['network']
+            gw = p['gateway']
+            dns = p['dns']
+            lines.append(f"add address={net_addr}/{p['mask']} gateway={gw} dns-server={dns}")
+            if p['lease']:
+                lines.append(f"# lease-time={p['lease']}")
+        lines.append("")
+        # 静态绑定
+        for p in pools:
+            if p.get("staticBindings"):
+                lines.append("/ip dhcp-server lease")
+                for binding in p["staticBindings"].split(","):
+                    binding = binding.strip()
+                    if "=" in binding:
+                        mac, ip = binding.split("=", 1)
+                        lines.append(f"add mac-address={mac.strip()} address={ip.strip()} server=dhcp_{p['interface']} comment=\"static-{p['interface']}\"")
+                lines.append("")
+        return "\n".join(lines)
+
+    # ─── NAT 端口映射 ────────────────────────────────
+
+    @staticmethod
+    def _generate_nat(params: Dict[str, Any],
+                      version: RouterOSVersion = RouterOSVersion.V6) -> str:
+        """生成 RouterOS NAT 端口映射 (DST-NAT + Masquerade)"""
+        lines = ["\n# === NAT 配置 ===", "/ip firewall nat"]
+        rules = params.get("rules") or params.get("natRules") or params.get("natList") or []
+
+        # Masquerade
+        if params.get("enableMasquerade", True):
+            masq_if = params.get("masqInterface", "ether1")
+            lines.append(f"add chain=srcnat out-interface={masq_if} action=masquerade comment=\"NAT伪装-{masq_if}\"")
+
+        # DST-NAT 端口映射
+        for i, r in enumerate(rules):
+            proto = r.get("protocol", "tcp")
+            dst_port = r.get("dstPort") or r.get("externalPort") or r.get("ext_port", "")
+            to_addr = r.get("toAddress") or r.get("internalIp") or r.get("int_ip", "")
+            to_ports = r.get("toPorts") or r.get("internalPort") or r.get("int_port", "")
+            in_if = r.get("inInterface", "ether1")
+            comment = r.get("comment", f"DNAT-{i+1}")
+
+            cmd_parts = [f"add chain=dstnat protocol={proto} dst-port={dst_port} in-interface={in_if}"]
+            if to_ports:
+                cmd_parts.append(f"to-addresses={to_addr} to-ports={to_ports}")
+            else:
+                cmd_parts.append(f"action=dst-nat to-addresses={to_addr}")
+            cmd_parts.append(f"comment=\"{comment}\"")
+            lines.append(" ".join(cmd_parts))
+
+        lines.append("")
+        return "\n".join(lines)
+
+    # ─── IPv6 ─────────────────────────────────
+
+    @staticmethod
+    def _generate_ipv6(params: Dict[str, Any], version: RouterOSVersion = RouterOSVersion.V6) -> str:
+        lines = ["\n# === IPv6 配置 ===", "/ipv6 address"]
+        for iface in (params.get("interfaces") or []):
+            intf = iface.get("interface", "bridge1")
+            addr = iface.get("ipv6_address", "")
+            if addr:
+                lines.append(f"add address={addr} interface={intf} advertise={'yes' if iface.get('ipv6_ra',True) else 'no'}")
+        lines.append("")
+        if any(i.get("ipv6_ra", True) for i in (params.get("interfaces") or [])):
+            lines.append("/ipv6 nd")
+            for iface in (params.get("interfaces") or []):
+                if iface.get("ipv6_ra", True):
+                    lines.append(f"set [find interface={iface.get('interface','bridge1')}] ra-interval=30-60 ra-lifetime=1800")
+            lines.append("")
+        for r in (params.get("ipv6_routes") or []):
+            lines.append(f"/ipv6 route add dst-address={r.get('dest','::/0')} gateway={r.get('nexthop','')}")
+            lines.append("")
+        return "\n".join(lines)
 
     # ─── 统一入口 ─────────────────────────────────
 
@@ -616,9 +742,17 @@ class RouterOSConfigGenerator:
                 sec = {**sec, "nat": auto_nat}
         if sec and any(sec.get(k) for k in ["nat", "filter_rules", "inputRules", "wireguard", "dnatRules"]):
             sections.append(RouterOSConfigGenerator.generate_security(sec, version))
+        # DHCP 服务（独立 key）
+        if config.get("dhcp"):
+            sections.append(RouterOSConfigGenerator._generate_dhcp(config["dhcp"], version))
+        # NAT 端口映射（独立 key）
+        if config.get("nat"):
+            sections.append(RouterOSConfigGenerator._generate_nat(config["nat"], version))
         # Firewall NAT for PCC
         if config.get("qos"):
             sections.append(RouterOSConfigGenerator.generate_qos(config["qos"], version))
+        if config.get("ipv6"):
+            sections.append(RouterOSConfigGenerator._generate_ipv6(config["ipv6"], version))
         # 策略路由（国内外分流 / 设备分流 / 应用分流）
         if config.get("policy_route"):
             sections.append(RouterOSConfigGenerator.generate_policy_routes(config["policy_route"], version))

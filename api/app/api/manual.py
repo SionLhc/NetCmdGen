@@ -14,6 +14,9 @@ from app.data.manual.h3c import H3C_COMMANDS
 from app.data.manual.ruijie import RUIJIE_COMMANDS
 from app.data.manual.maipu import MAIPU_COMMANDS
 from app.data.manual.routeros import ROUTEROS_COMMANDS
+from app.data.manual.cisco import CISCO_MANUAL
+from app.data.manual.tplink import TP_LINK_MANUAL
+from app.data.manual.juniper import JUNIPER_MANUAL
 
 router = APIRouter()
 
@@ -23,6 +26,9 @@ _MANUALS: Dict[str, Dict[str, Any]] = {
     "ruijie": RUIJIE_COMMANDS,
     "maipu": MAIPU_COMMANDS,
     "routeros": ROUTEROS_COMMANDS,
+    "cisco": {"cisco": CISCO_MANUAL},
+    "tplink": {"tplink": TP_LINK_MANUAL},
+    "juniper": {"juniper": JUNIPER_MANUAL},
 }
 
 # 各厂商可用版本列表
@@ -53,6 +59,9 @@ _VENDOR_VERSIONS: Dict[str, List[Dict[str, str]]] = {
         {"code": "v6", "name": "RouterOS V6"},
         {"code": "v7", "name": "RouterOS V7"},
     ],
+    "cisco": [{"code": "all", "name": "全部版本（IOS/IOS-XE）"}],
+    "tplink": [{"code": "all", "name": "全部版本"}],
+    "juniper": [{"code": "all", "name": "全部版本（Junos）"}],
 }
 
 
@@ -137,7 +146,7 @@ def manual_list(
     # 根据数据结构选择对应的扁平化方法
     # 华为/H3C 使用嵌套 dict 格式（叶子是 command dict）
     # 锐捷/迈普 使用嵌套 dict + list 格式（叶子是 list of dicts）
-    if vendor in ("ruijie", "maipu"):
+    if vendor in ("ruijie", "maipu", "cisco", "tplink", "juniper"):
         items = _flatten_list_format(data)
     else:
         items = _flatten(data)

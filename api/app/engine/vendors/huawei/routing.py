@@ -235,4 +235,93 @@ class RoutingConfigGenerator:
                     v.get("advertise_interval", 1)
                 ))
 
+        if "bfd" in config:
+            config_lines.append("#\n# BFD配置\n#\n")
+            bfd = config["bfd"]
+            config_lines.append("bfd")
+            if bfd.get("ospf_enable"):
+                config_lines.append(" ospf bfd enable")
+            for s in (bfd.get("sessions") or []):
+                config_lines.append(f"bfd {s['name']} bind peer-ip {s['peer_ip']} source-ip {s['source_ip']}")
+                config_lines.append(" discriminator local 1 remote 2")
+                config_lines.append(" commit\n#")
+
+        if "pbr" in config:
+            config_lines.append("#\n# 策略路由PBR\n#\n")
+            for r in (config["pbr"].get("rules") or []):
+                num = r.get("acl_num", 3000)
+                config_lines.append(f"acl number {num}")
+                config_lines.append(f" rule 5 permit ip source {r.get('source','any')}\n#")
+                config_lines.append(f"traffic classifier PBR-{num}")
+                config_lines.append(f" if-match acl {num}")
+                config_lines.append(f"traffic behavior PBR-{num}")
+                config_lines.append(f" redirect ip-nexthop {r.get('nexthop','')}")
+                config_lines.append(f"traffic policy PBR-POLICY")
+                config_lines.append(f" classifier PBR-{num} behavior PBR-{num}\n#")
+
+        if "ipsec" in config:
+            ipsec = config["ipsec"]
+            config_lines.append("#\n# IPSec VPN配置\n#\n")
+            config_lines.append("ike proposal 1")
+            config_lines.append(" encryption-algorithm aes-256")
+            config_lines.append(" dh group14")
+            config_lines.append(" authentication-algorithm sha2-256\n#")
+            config_lines.append(f"ike peer vpn-peer v1")
+            config_lines.append(f" pre-shared-key cipher {ipsec.get('pre_shared_key','vpn-key')}")
+            config_lines.append(f" remote-address {ipsec.get('peer_ip','1.2.3.4')}\n#")
+            config_lines.append("ipsec proposal vpn-proposal")
+            config_lines.append(" transform esp")
+            config_lines.append(" esp authentication-algorithm sha2-256")
+            config_lines.append(" esp encryption-algorithm aes-256\n#")
+            config_lines.append(f"acl number 3000")
+            config_lines.append(f" rule 5 permit ip source {ipsec.get('local_net','192.168.1.0')} 0.0.0.255 destination {ipsec.get('remote_net','192.168.2.0')} 0.0.0.255\n#")
+            config_lines.append("ipsec policy vpn-policy 10 isakmp")
+            config_lines.append(" security acl 3000")
+            config_lines.append(" ike-peer vpn-peer")
+            config_lines.append(" proposal vpn-proposal")
+
+        if "bgp_policy" in config:
+            bp = config["bgp_policy"]
+            config_lines.append("#\n# BGP路由策略\n#\n")
+            config_lines.append("route-policy BGP-POLICY permit node 10")
+            config_lines.append(f" if-match ip-prefix {bp.get('prefix_name','LOCAL')}")
+            config_lines.append(f" apply local-preference {bp.get('local_pref',200)}")
+            config_lines.append("#")
+            for pfx in (bp.get("prefixes") or []):
+                config_lines.append(f"ip ip-prefix {bp.get('prefix_name','LOCAL')} index 10 permit {pfx.get('network','192.168.0.0')} {pfx.get('mask_len',16)}")
+
+        if "mpls" in config:
+            mpls = config["mpls"]
+            config_lines.append("#\n# MPLS配置\n#\n")
+            config_lines.append("mpls lsr-id "+mpls.get("lsr_id","1.1.1.1"))
+            config_lines.append("mpls")
+            config_lines.append("mpls ldp")
+            for iface in (mpls.get("interfaces") or []):
+                config_lines.append(f"interface {iface}")
+                config_lines.append(" mpls")
+                config_lines.append(" mpls ldp")
+                config_lines.append("#")
+
+        if "vxlan" in config:
+            vx = config["vxlan"]
+            config_lines.append("#\n# VXLAN配置\n#\n")
+            config_lines.append("bridge-domain 1")
+            config_lines.append(f" vxlan vni {vx.get('vni',5000)}")
+            config_lines.append(f"interface Nve1")
+            config_lines.append(f" source {vx.get('source_ip','1.1.1.1')}")
+            for peer in (vx.get("peers") or []):
+                config_lines.append(f" vni {vx.get('vni',5000)} head-end peer-list protocol bgp")
+                config_lines.append(f" vni {vx.get('vni',5000)} head-end peer-list {peer}")
+            config_lines.append("#")
+
+        if "gre" in config:
+            gre = config["gre"]
+            config_lines.append("#\n# GRE隧道配置\n#\n")
+            config_lines.append(f"interface Tunnel0/0/1")
+            config_lines.append(f" ip address {gre.get('tunnel_ip','10.0.0.1')} {gre.get('tunnel_mask','255.255.255.0')}")
+            config_lines.append(" tunnel-protocol gre")
+            config_lines.append(f" source {gre.get('source','GigabitEthernet0/0/0')}")
+            config_lines.append(f" destination {gre.get('destination','2.2.2.2')}")
+            config_lines.append("#")
+
         return "".join(config_lines)
