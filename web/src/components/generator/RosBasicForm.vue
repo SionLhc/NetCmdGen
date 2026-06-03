@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="100px" size="small" @change="emitUpdate">
+  <el-form label-width="100px" size="small">
     <!-- 设备标识 -->
     <el-divider content-position="left">📋 设备标识</el-divider>
     <el-form-item label="设备名称">
@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, watch, nextTick } from 'vue'
 
 const props = defineProps<{ modelValue: Record<string, any> }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Record<string, any>] }>()
@@ -89,11 +89,27 @@ const form = reactive({
   dns_cache: true,
 })
 
-// 从 props 初始化
-watch(() => props.modelValue, (v) => { if (v && Object.keys(v).length > 0) Object.assign(form, v) }, { immediate: true })
+// 从 props 初始化（syncing 锁防回环，不能用 once:true）
+let _bsyncing = false
+watch(() => props.modelValue, (v) => {
+  if (_bsyncing || !v || Object.keys(v).length === 0) return
+  _bsyncing = true
+  const topKeys = ['hostname','password','enable_ssh','ssh_port','enable_telnet','enable_ntp','ntp_servers','enable_snmp','snmp_read','snmp_write','username','user_level','disable_services','router_id']
+  topKeys.forEach(k => { if (k in v) (form as any)[k] = v[k] })
+  if (v.disable_services && Array.isArray(v.disable_services)) {
+    form.disable_services.length = 0; form.disable_services.push(...v.disable_services)
+  }
+  nextTick(() => { _bsyncing = false })
+}, { immediate: true })
 
-function emitUpdate() { emit('update:modelValue', { ...form }) }
-watch(form, () => emitUpdate(), { deep: true })
+// 轻量防抖 emit
+let _bt: ReturnType<typeof setTimeout> | null = null
+function emitUpdate() {
+  if (_bt) clearTimeout(_bt)
+  _bt = setTimeout(() => emit('update:modelValue', { ...form }), 200)
+}
+// 只 watch 顶层属性（不用 deep）
+watch(() => ({ ...form }), () => emitUpdate())
 </script>
 
 <style scoped>

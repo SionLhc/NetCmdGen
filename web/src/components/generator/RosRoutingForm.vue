@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="110px" size="small" @change="emitUpdate">
+  <el-form label-width="110px" size="small">
     <!-- PCC 多线负载均衡 -->
     <el-divider content-position="left">⚖ PCC 多线负载均衡（对标 WinBox）</el-divider>
     <el-form-item label="启用 PCC">
@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, watch, nextTick } from 'vue'
 
 const props = defineProps<{ modelValue: Record<string, any> }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Record<string, any>] }>()
@@ -184,7 +184,15 @@ const totalBuckets = computed(() => {
   return form.pccWans.reduce((sum, w) => sum + w.bucketCount, 0)
 })
 
-/** 根据每条的 bucketCount 重新计算连续的 bucketStart/bucketEnd（从0开始） */
+/** 防抖 emit（200ms）避免高频触发 */
+let emitTimer: ReturnType<typeof setTimeout> | null = null
+function emitUpdate() {
+  if (emitTimer) clearTimeout(emitTimer)
+  emitTimer = setTimeout(() => emit('update:modelValue', { ...form }), 200)
+}
+
+/** 根据每条的 bucketCount 重新计算连续的 bucketStart/bucketEnd（从0开始）
+ *  关键优化：for 循环内只修改数据不 emit，循环结束后统一 emit */
 function recalcBuckets() {
   let pos = 0
   for (const w of form.pccWans) {
@@ -213,9 +221,30 @@ function addPccWan() {
   emitUpdate()
 }
 
-watch(() => props.modelValue, (v) => { if (v && Object.keys(v).length > 0) Object.assign(form, v) }, { immediate: true })
-function emitUpdate() { emit('update:modelValue', { ...form }) }
-watch(form, () => emitUpdate(), { deep: true })
+// 单向 props → form 同步（用 syncing 锁防止回环，不能用 once:true）
+let _syncing = false
+watch(() => props.modelValue, (v) => {
+  if (_syncing || !v || Object.keys(v).length === 0) return
+  _syncing = true
+  const { pccWans, staticRoutes, ospfNetworks, policyRoutes, ...rest } = v as any
+  Object.assign(form, rest)
+  if (Array.isArray(pccWans)) { form.pccWans.length = 0; form.pccWans.push(...pccWans) }
+  if (Array.isArray(staticRoutes)) { form.staticRoutes.length = 0; form.staticRoutes.push(...staticRoutes) }
+  if (Array.isArray(ospfNetworks)) { form.ospfNetworks.length = 0; form.ospfNetworks.push(...ospfNetworks) }
+  if (Array.isArray(policyRoutes)) { form.policyRoutes.length = 0; form.policyRoutes.push(...policyRoutes) }
+  nextTick(() => { _syncing = false })
+}, { immediate: true })
+
+// 轻量 watch：只监听关键字段变化，不用 deep watch
+watch([() => form.pccEnabled, () => form.pccClassifier, () => form.pccMarkOutput,
+  () => form.ospfEnabled, () => form.ospfRouterId],
+  () => emitUpdate()
+)
+// 数组字段单独 watch（轻量）
+watch(() => form.pccWans.length, () => emitUpdate())
+watch(() => form.staticRoutes.length, () => emitUpdate())
+watch(() => form.ospfNetworks.length, () => emitUpdate())
+watch(() => form.policyRoutes.length, () => emitUpdate())
 </script>
 
 <style scoped>

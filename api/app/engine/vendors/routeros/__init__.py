@@ -282,7 +282,7 @@ class RouterOSConfigGenerator:
                            f" protocol={dnat.get('protocol','tcp')} dst-port={dnat['publicPort']}"
                            f" action=dst-nat to-addresses={dnat['internalIp']}"
                            f" to-ports={dnat.get('internalPort', dnat['publicPort'])}"
-                           f"{' comment=\"' + dnat['description'] + '\"' if dnat.get('description') else ''}")
+                           + (f" comment={dnat['description']}" if dnat.get('description') else ""))
         # WireGuard (V7)
         if config.get("wireguard", False) and version == RouterOSVersion.V7:
             lines.append("# WireGuard VPN (V7)")

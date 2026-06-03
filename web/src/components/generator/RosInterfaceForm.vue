@@ -1,5 +1,5 @@
 <template>
-  <el-form label-width="110px" size="small" @change="emitUpdate">
+  <el-form label-width="110px" size="small">
     <!-- 物理接口 -->
     <el-divider content-position="left">🔌 物理接口</el-divider>
     <div v-for="(iface, i) in form.interfaces" :key="'if'+i" class="iface-row">
@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, watch, nextTick } from 'vue'
 
 const props = defineProps<{ modelValue: Record<string, any> }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Record<string, any>] }>()
@@ -69,9 +69,29 @@ const form = reactive({
   ] as Array<{ name: string; stp: string; vlanFiltering: boolean; portsStr: string }>,
 })
 
-watch(() => props.modelValue, (v) => { if (v && Object.keys(v).length > 0) Object.assign(form, v) }, { immediate: true })
-function emitUpdate() { emit('update:modelValue', { ...form }) }
-watch(form, () => emitUpdate(), { deep: true })
+// 单向 props → form 同步（syncing 锁防回环，不能用 once:true）
+let _isyncing = false
+watch(() => props.modelValue, (v) => {
+  if (_isyncing || !v || Object.keys(v).length === 0) return
+  _isyncing = true
+  if (Array.isArray((v as any).interfaces)) {
+    form.interfaces.length = 0; form.interfaces.push(...(v as any).interfaces)
+  }
+  if (Array.isArray((v as any).bridges)) {
+    form.bridges.length = 0; form.bridges.push(...(v as any).bridges)
+  }
+  nextTick(() => { _isyncing = false })
+}, { immediate: true })
+
+// 防抖 emit
+let _it: ReturnType<typeof setTimeout> | null = null
+function emitUpdate() {
+  if (_it) clearTimeout(_it)
+  _it = setTimeout(() => emit('update:modelValue', { ...form }), 200)
+}
+// 浅 watch（接口数量变化时 emit）
+watch(() => form.interfaces.length, () => emitUpdate())
+watch(() => form.bridges.length, () => emitUpdate())
 </script>
 
 <style scoped>

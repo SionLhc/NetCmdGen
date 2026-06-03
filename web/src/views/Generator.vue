@@ -357,11 +357,13 @@ const vendorModelOptions = computed(() => {
   return []
 })
 
-/** 切换厂商时自动重置版本号 */
+/** 切换厂商时自动重置版本号 + 强制重建所有子表单 */
 function onVendorChange() {
   const defaults: Record<string, string> = { huawei:'v8', h3c:'v7', ruijie:'v5', maipu:'v5', routeros:'v7' }
   vrpVersion.value = (defaults[activeVendor.value] || 'v5') as any
   deviceModelSelected.value = ''
+  // 强制重建所有子组件（:key 变化 → 子组件销毁重建 → watch immediate 重新执行）
+  formKey.value++
 }
 
 /** 型号→版本映射：选型号后自动锁定对应VRP版本 */

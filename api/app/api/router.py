@@ -2,12 +2,27 @@
 from fastapi import APIRouter
 
 from app.api import generate, manual, network_tools, tools_extra, tools_subnet, topology
+from app.api.diagnostics import dns as diag_dns
+from app.api.diagnostics import tcp_port as diag_tcp
+from app.api.diagnostics import http_check as diag_http
+from app.api.diagnostics import mtu as diag_mtu
+from app.api.diagnostics import jitter as diag_jitter
+from app.api.diagnostics import history as diag_history
 
 api_router = APIRouter()
 
 api_router.include_router(tools_subnet.router, prefix="/tools", tags=["tools"])
 api_router.include_router(tools_extra.router, prefix="/tools", tags=["tools"])
 api_router.include_router(network_tools.router)  # /net/* 路由（ping/portscan/traceroute/dns）
+
+# 诊断子系统（/api/v1/diagnostics/*）
+api_router.include_router(diag_dns.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(diag_tcp.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(diag_http.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(diag_mtu.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(diag_jitter.router, prefix="/diagnostics", tags=["diagnostics"])
+api_router.include_router(diag_history.router, prefix="/diagnostics", tags=["diagnostics"])
+
 api_router.include_router(generate.router, tags=["generate"])
 api_router.include_router(manual.router, tags=["manual"])
 api_router.include_router(topology.router, tags=["topology"])

@@ -582,7 +582,6 @@ class CiscoConfigGenerator:
         "interface": generate_interface_config, "wan": generate_wan_config,
         "dhcp": generate_dhcp_config, "nat": generate_nat_config,
         "ipv6": generate_ipv6_config, "ipsec": generate_ipsec_config,
-        "vxlan": generate_vxlan_config, "gre": generate_gre_config,
     }
 
     @staticmethod

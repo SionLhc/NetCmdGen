@@ -72,7 +72,14 @@ const model = reactive({
   ...props.modelValue,
 })
 
-watch(() => model, () => emit('update:modelValue', { ...model }), { deep: true })
+// 防抖 emit（200ms）避免高频触发
+let _fw: ReturnType<typeof setTimeout> | null = null
+const _emit = () => {
+  if (_fw) clearTimeout(_fw)
+  _fw = setTimeout(() => emit('update:modelValue', { ...model }), 200)
+}
+// 只 watch 顶层属性数量变化（不用 deep watch）
+watch(() => Object.keys(model).length, () => _emit())
 </script>
 
 <style scoped>

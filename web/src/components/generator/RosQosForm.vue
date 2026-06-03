@@ -109,6 +109,13 @@ const enabledApps = computed(() => {
     .map(([k]) => map[k] || k)
 })
 
+// 防抖 emit
+let _qr: ReturnType<typeof setTimeout> | null = null
+function _emit() {
+  if (_qr) clearTimeout(_qr)
+  _qr = setTimeout(() => emit('update:modelValue', { ...form }), 200)
+}
+
 // 只监听关键字段（避免完整 deep watch 性能问题）
 watch([
   () => form.total_bandwidth_down,
@@ -116,5 +123,5 @@ watch([
   () => form.per_ip_enabled,
   () => form.per_ip_limit,
   () => form.app_priorities,
-], () => emit('update:modelValue', { ...form }), { deep: true })
+], () => _emit(), { deep: true })
 </script>

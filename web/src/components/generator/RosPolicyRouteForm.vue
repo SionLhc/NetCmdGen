@@ -123,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch, computed } from 'vue'
+import { reactive, watch, computed, nextTick } from 'vue'
 
 const props = defineProps<{ modelValue: Record<string, any>; wanInterfaces?: string[] }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Record<string, any>] }>()
@@ -159,11 +159,37 @@ function onAppTypeChange(ar: any) {
   emitUpdate()
 }
 
+let _pt: ReturnType<typeof setTimeout> | null = null
 function emitUpdate() {
-  emit('update:modelValue', { ...form })
+  if (_pt) clearTimeout(_pt)
+  _pt = setTimeout(() => emit('update:modelValue', { ...form }), 200)
 }
 
-watch(form, () => emitUpdate(), { deep: true })
+// 轻量 watch（只监听关键结构变化）
+watch(() => form.deviceRoutes.length, () => emitUpdate())
+watch(() => form.appRoutes.length, () => emitUpdate())
+watch(() => form.cnRoute.enabled, () => emitUpdate())
+watch(() => form.cnRoute.cnWan, () => emitUpdate())
+watch(() => form.cnRoute.intlWan, () => emitUpdate())
+
+// 父组件 props 更新时同步到内部 form（模板加载/切换场景时可能用到）
+let _psyncing = false
+watch(() => props.modelValue, (v) => {
+  if (_psyncing || !v || Object.keys(v).length === 0) return
+  _psyncing = true
+  if (v.cnRoute) {
+    if (typeof v.cnRoute.enabled === 'boolean') form.cnRoute.enabled = v.cnRoute.enabled
+    if (v.cnRoute.cnWan) form.cnRoute.cnWan = v.cnRoute.cnWan
+    if (v.cnRoute.intlWan) form.cnRoute.intlWan = v.cnRoute.intlWan
+  }
+  if (Array.isArray(v.deviceRoutes) && v.deviceRoutes.length > 0) {
+    form.deviceRoutes.length = 0; form.deviceRoutes.push(...v.deviceRoutes)
+  }
+  if (Array.isArray(v.appRoutes) && v.appRoutes.length > 0) {
+    form.appRoutes.length = 0; form.appRoutes.push(...v.appRoutes)
+  }
+  nextTick(() => { _psyncing = false })
+}, { immediate: true })
 </script>
 
 <style scoped>
