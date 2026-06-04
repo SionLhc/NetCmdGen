@@ -107,8 +107,9 @@ async def _quick_test(host: str, port: int, username: str, password: str,
     """快速连接测试：优先尝试原生 API(8728)，再降级 REST(80/443)"""
     try:
         if _is_api_port(port):
-            # 使用 librouteros 原生 API
-            info = api_get_system(host, port, username, password, use_ssl=use_ssl)
+            # 8728 是纯 TCP，只有 8729 才用 SSL
+            api_ssl = use_ssl if port == 8729 else False
+            info = api_get_system(host, port, username, password, use_ssl=api_ssl)
             return info
         info = await _ros_request(host, port, username, password,
                                   "system/resource", use_ssl=use_ssl, timeout=5)
@@ -266,11 +267,18 @@ def proxy_get(device_id: str = Query(...), path: str = Query(..., description="�
     creds = _get_device_creds(device_id)
     if _is_api_port(creds["port"]):
         try:
+            # 8728 是纯 TCP，强制关闭 SSL
+            use_ssl = creds["use_ssl"] if creds["port"] == 8729 else False
             result = api_select(creds["host"], creds["port"], creds["username"],
-                                creds["password"], path, use_ssl=creds["use_ssl"])
+                                creds["password"], path, use_ssl=use_ssl)
             return result
+        except ConnectionError as e:
+            # 连接失败 → 返回友好错误，不是 500
+            return [{"_error": f"无法连接设备 ({creds['host']}:{creds['port']})。\n"
+                               f"请在 RouterOS 执行: /ip service enable api\n"
+                               f"或用 Winbox → IP → Services → 启用 api"}]
         except Exception as e:
-            raise HTTPException(500, f"API 查询失败 [{path}]: {str(e)[:300]}")
+            return [{"_error": f"查询失败 [{path}]: {str(e)[:300]}"}]
     return asyncio.run(_ros_request(creds["host"], creds["port"], creds["username"],
                                      creds["password"], path, use_ssl=creds["use_ssl"]))
 

@@ -102,7 +102,9 @@
                 @dblclick="editRow(row)"
               >
                 <td class="rb-td rb-td-num">{{ (page-1)*pageSize+i+1 }}</td>
-                <td v-for="col in tableColumns" :key="col" class="rb-td">
+                <td v-for="col in tableColumns" :key="col" class="rb-td"
+                :style="col==='_error'?{color:'#ef4444',whiteSpace:'pre-wrap',maxWidth:'600px',fontFamily:'sans-serif'}:{}"
+              >
                   <span v-if="col === 'running' || col === 'disabled' || col === 'enabled'"
                     :style="{color:row[col]==='true'||row[col]===true?'#10b981':row[col]==='false'||row[col]===false?'#ef4444':'inherit'}"
                   >{{ row[col] }}</span>
@@ -319,15 +321,10 @@ async function loadData() {
   loading.value = true
   try {
     const r = await fetch(`/api/ros/proxy?device_id=${deviceId.value}&path=${encodeURIComponent(currentPath.value)}`)
-    if (!r.ok) {
-      const err = await r.text()
-      tableData.value = [{ '.error': `请求失败 (${r.status}): ${err.slice(0, 200)}` }]
-      tableColumns.value = ['.error']
-      return
-    }
     const data = await r.json()
     tableData.value = Array.isArray(data) ? data : [data]
     if (tableData.value.length) {
+      // 提取所有列名，_error 列显示为红色提示
       tableColumns.value = Array.from(new Set(
         tableData.value.flatMap((r:any)=>Object.keys(r))
       )).filter(k => !k.startsWith('.') && k !== '.id').slice(0, 12)
@@ -335,8 +332,8 @@ async function loadData() {
       tableColumns.value = []
     }
   } catch (e: any) {
-    tableData.value = [{ '.error': `网络错误: ${e.message}` }]
-    tableColumns.value = ['.error']
+    tableData.value = [{ '_error': `网络错误: ${e.message}` }]
+    tableColumns.value = ['_error']
   }
   finally { loading.value = false }
 }
