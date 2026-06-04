@@ -27,43 +27,54 @@ IF_SPEED = "1.3.6.1.2.1.2.2.1.5"           # ifSpeed
 async def _snmp_get(host: str, community: str, oid: str,
                     port: int = 161) -> str:
     """SNMP GET 单个 OID"""
-    iterator = get_cmd(
+    # pysnmp >=7.x: get_cmd 返回 coroutine，需 await 后同步遍历
+    gen = await get_cmd(
         SnmpEngine(),
         CommunityData(community, mpModel=1),
         await UdpTransportTarget.create((host, port), timeout=2, retries=1),
         ContextData(),
         ObjectType(ObjectIdentity(oid)),
     )
-    err_ind, err_status, err_idx, var_binds = await iterator
-    if err_ind:
-        raise ConnectionError(f"SNMP 错误: {err_ind}")
-    if err_status:
-        raise ConnectionError(f"SNMP 状态错误: {err_status.prettyPrint()}")
-    for vb in var_binds:
-        return str(vb[1])
+    for err_ind, err_status, err_idx, var_binds in gen:
+        if err_ind:
+            raise ConnectionError(f"SNMP 错误: {err_ind}")
+        if err_status:
+            raise ConnectionError(f"SNMP 状态错误: {err_status.prettyPrint()}")
+        for vb in var_binds:
+            return str(vb[1])
     return "0"
 
 
 async def _snmp_walk(host: str, community: str, base_oid: str,
                      port: int = 161) -> dict[int, str]:
     """SNMP WALK 获取某 OID 下所有接口的值，返回 {ifIndex: value}"""
-    
     result = {}
-    iterator = next_cmd(
-        SnmpEngine(),
-        CommunityData(community, mpModel=1),
-        await UdpTransportTarget.create((host, port), timeout=3, retries=1),
-        ContextData(),
-        ObjectType(ObjectIdentity(base_oid)),
-        lexicographicMode=False,
-    )
-    async for err_ind, err_status, err_idx, var_binds in iterator:
-        if err_ind or err_status:
-            break
-        for vb in var_binds:
-            oid_str = str(vb[0])
-            idx = int(oid_str.split(".")[-1]) if "." in oid_str else 0
-            result[idx] = str(vb[1])
+    # pysnmp >=7.x: next_cmd 返回 coroutine，需 await 后同步遍历
+    try:
+        gen = await next_cmd(
+            SnmpEngine(),
+            CommunityData(community, mpModel=1),
+            await UdpTransportTarget.create((host, port), timeout=3, retries=1),
+            ContextData(),
+            ObjectType(ObjectIdentity(base_oid)),
+            lexicographicMode=False,
+        )
+        for err_ind, err_status, err_idx, var_binds in gen:
+            if err_ind or err_status:
+                break
+            for vb in var_binds:
+                oid_str = str(vb[0])
+                idx = int(oid_str.split(".")[-1]) if "." in oid_str else 0
+                result[idx] = str(vb[1])
+    except Exception:
+        # 如果 WALK 失败，尝试逐个 GET 前 20 个接口
+        for i in range(1, 21):
+            try:
+                val = await _snmp_get(host, community, f"{base_oid}.{i}", port)
+                if val and val != "0":
+                    result[i] = val
+            except Exception:
+                break
     return result
 
 
