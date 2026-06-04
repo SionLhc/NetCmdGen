@@ -3,7 +3,7 @@ from fastapi import APIRouter
 
 from app.api import generate, manual, network_tools, tools_extra, tools_subnet, topology
 from app.api import collaboration, config_audit, lldp_discovery, report, ssh_terminal
-from app.api import ros_rest, ros_mndp
+from app.api import ros_rest, ros_mndp, ros_snmp_monitor
 from app.api.diagnostics import dns as diag_dns
 from app.api.diagnostics import tcp_port as diag_tcp
 from app.api.diagnostics import http_check as diag_http
@@ -29,6 +29,7 @@ api_router.include_router(generate.router, tags=["generate"])
 api_router.include_router(manual.router, tags=["manual"])
 api_router.include_router(ros_rest.router, tags=["ros"])
 api_router.include_router(ros_mndp.router, tags=["ros"])
+api_router.include_router(ros_snmp_monitor.router, tags=["ros"])
 api_router.include_router(collaboration.router, tags=["collab"])
 api_router.include_router(config_audit.router, tags=["audit"])
 api_router.include_router(lldp_discovery.router, tags=["lldp"])
