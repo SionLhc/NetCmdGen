@@ -14,6 +14,10 @@ import httpx
 from fastapi import APIRouter, Query, HTTPException
 
 from app.api.ros_models import RosCredentials
+from app.api.ros_api import (
+    api_select, api_add, api_update, api_delete as ros_api_delete,
+    api_get_system, close_connection,
+)
 
 
 router = APIRouter(prefix="/ros", tags=["ros"])
@@ -100,8 +104,12 @@ async def _ros_request(host: str, port: int, username: str, password: str,
 
 async def _quick_test(host: str, port: int, username: str, password: str,
                       use_ssl: bool = True) -> dict:
-    """快速连接测试，返回含中文提示的诊断信息"""
+    """快速连接测试：优先尝试原生 API(8728)，再降级 REST(80/443)"""
     try:
+        if _is_api_port(port):
+            # 使用 librouteros 原生 API
+            info = api_get_system(host, port, username, password, use_ssl=use_ssl)
+            return info
         info = await _ros_request(host, port, username, password,
                                   "system/resource", use_ssl=use_ssl, timeout=5)
         return {
@@ -241,34 +249,73 @@ def _get_device_creds(device_id: str):
 
 # ─── 通用 REST CRUD 代理（支持任意 RouterOS 菜单路径）───
 
-@router.get("/proxy", summary="通用 REST 查询")
-def proxy_get(device_id: str = Query(...), path: str = Query(..., description="菜单路径，如 ip/address")):
+# ─── 统一代理：自动检测端口，分发到 REST (80/443) 或 原生 API (8728/8729) ───
+
+def _is_api_port(port: int) -> bool:
+    return port in (8728, 8729)
+
+
+@router.get("/proxy", summary="通用查询（自动检测 REST/API）")
+def proxy_get(device_id: str = Query(...), path: str = Query(..., description="菜单路径")):
     creds = _get_device_creds(device_id)
+    if _is_api_port(creds["port"]):
+        return api_select(creds["host"], creds["port"], creds["username"],
+                          creds["password"], path, use_ssl=creds["use_ssl"])
     return asyncio.run(_ros_request(creds["host"], creds["port"], creds["username"],
                                      creds["password"], path, use_ssl=creds["use_ssl"]))
 
 
-@router.patch("/proxy", summary="通用 REST 更新")
+@router.patch("/proxy", summary="通用更新")
 async def proxy_patch(device_id: str = Query(...), path: str = Query(...), data: str = Query(default="{}")):
-    creds = _get_device_creds(device_id)
     import json
+    creds = _get_device_creds(device_id)
+    payload = json.loads(data)
+    # 从路径中提取 .id（路径格式：菜单/记录ID）
+    path_parts = path.split("/")
+    if _is_api_port(creds["port"]):
+        record_id = path_parts[-1] if path_parts[-1].startswith("*") else ""
+        menu_path = "/".join(path_parts[:-1]) if record_id else path
+        if not record_id:
+            # 从 data 中提取 .id
+            record_id = payload.get(".id", "")
+            if not record_id:
+                raise HTTPException(400, "更新操作需要 .id")
+        api_update(creds["host"], creds["port"], creds["username"],
+                   creds["password"], menu_path, record_id, payload,
+                   use_ssl=creds["use_ssl"])
+        return {"success": True}
     return await _ros_request(creds["host"], creds["port"], creds["username"],
                                creds["password"], path, method="PATCH",
-                               data=json.loads(data), use_ssl=creds["use_ssl"])
+                               data=payload, use_ssl=creds["use_ssl"])
 
 
-@router.put("/proxy", summary="通用 REST 创建")
+@router.put("/proxy", summary="通用创建")
 async def proxy_put(device_id: str = Query(...), path: str = Query(...), data: str = Query(default="{}")):
-    creds = _get_device_creds(device_id)
     import json
+    creds = _get_device_creds(device_id)
+    payload = json.loads(data)
+    if _is_api_port(creds["port"]):
+        new_id = api_add(creds["host"], creds["port"], creds["username"],
+                         creds["password"], path, payload, use_ssl=creds["use_ssl"])
+        return {".id": new_id}
     return await _ros_request(creds["host"], creds["port"], creds["username"],
                                creds["password"], path, method="PUT",
-                               data=json.loads(data), use_ssl=creds["use_ssl"])
+                               data=payload, use_ssl=creds["use_ssl"])
 
 
-@router.delete("/proxy", summary="通用 REST 删除")
+@router.delete("/proxy", summary="通用删除")
 async def proxy_delete(device_id: str = Query(...), path: str = Query(...)):
     creds = _get_device_creds(device_id)
+    path_parts = path.split("/")
+    if _is_api_port(creds["port"]):
+        record_id = path_parts[-1] if path_parts[-1].startswith("*") else ""
+        menu_path = "/".join(path_parts[:-1]) if record_id else path
+        if not record_id:
+            raise HTTPException(400, "删除操作需要记录 .id")
+        api_delete(creds["host"], creds["port"], creds["username"],
+                   creds["password"], menu_path, record_id,
+                   use_ssl=creds["use_ssl"])
+        return {"success": True}
     return await _ros_request(creds["host"], creds["port"], creds["username"],
                                creds["password"], path, method="DELETE",
                                use_ssl=creds["use_ssl"])

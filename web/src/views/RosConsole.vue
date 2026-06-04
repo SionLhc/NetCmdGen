@@ -139,8 +139,13 @@
       <el-form-item label="设备名称"><el-input v-model="login.name" placeholder="Core-R1" /></el-form-item>
       <el-form-item label="IP 地址"><el-input v-model="login.host" placeholder="192.168.88.1" /></el-form-item>
       <el-form-item label="端口">
-        <el-input-number v-model="login.port" :min="1" :max="65535" />
-        <span style="font-size:11px;color:#909399;margin-left:8px">REST API (443)</span>
+        <el-select v-model="login.port" style="width:140px">
+          <el-option :value="8728" label="8728 (API 默认)" />
+          <el-option :value="8729" label="8729 (API-SSL)" />
+          <el-option :value="443" label="443 (REST HTTPS)" />
+          <el-option :value="80" label="80 (REST HTTP)" />
+        </el-select>
+        <span style="font-size:11px;color:#909399;margin-left:8px">{{ login.port === 8728 ? '推荐，无需额外配置' : login.port === 8729 ? '需启用 api-ssl' : '需启用 www-ssl' }}</span>
       </el-form-item>
       <el-form-item label="用户名"><el-input v-model="login.user" placeholder="admin" /></el-form-item>
       <el-form-item label="密码"><el-input v-model="login.pass" type="password" show-password placeholder="输入密码" /></el-form-item>
@@ -227,7 +232,7 @@ const selectedRow = ref<any>(null)
 const page = ref(1)
 const pageSize = 50
 
-const login = reactive({ name:'',host:'',port:443,user:'admin',pass:'',ssl:true })
+const login = reactive({ name:'',host:'',port:8728,user:'admin',pass:'',ssl:false })
 const showLogin = ref(false)
 const connecting = ref(false)
 const loginError = ref('')
