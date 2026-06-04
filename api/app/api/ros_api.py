@@ -27,20 +27,25 @@ def get_api(host: str, port: int, username: str, password: str,
             _connections.pop(key, None)
 
     # 创建新连接
-    if use_ssl:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        api = ros_connect(
-            host=host, username=username, password=password,
-            port=port, ssl_wrapper=ctx.wrap_socket,
-            login_method=plain, encoding='UTF-8',
-        )
-    else:
-        api = ros_connect(
-            host=host, username=username, password=password,
-            port=port, login_method=plain, encoding='UTF-8',
-        )
+    try:
+        if use_ssl:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            api = ros_connect(
+                host=host, username=username, password=password,
+                port=port, ssl_wrapper=ctx.wrap_socket,
+                login_method=plain, encoding='UTF-8',
+            )
+        else:
+            api = ros_connect(
+                host=host, username=username, password=password,
+                port=port, login_method=plain, encoding='UTF-8',
+            )
+    except (ConnectionRefusedError, OSError) as e:
+        raise ConnectionError(
+            f"无法连接 {host}:{port}，请在 RouterOS 执行 /ip service enable api 启用 API 服务"
+        ) from e
     _connections[key] = api
     return api
 

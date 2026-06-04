@@ -133,7 +133,13 @@ async def _quick_test(host: str, port: int, username: str, password: str,
     except Exception as e:
         err = str(e)
         if "ConnectionRefused" in err or "connect" in err.lower():
-            msg = f"连接被拒绝：请确认 IP/端口正确，设备 WebFig 服务是否启用（默认端口 443，Winbox 端口 8291 不可用）"
+            msg = (
+                "连接被拒绝（端口未开放）。\n"
+                "\n8728 端口 → 需在 RouterOS 执行: /ip service enable api"
+                "\n8729 端口 → 需在 RouterOS 执行: /ip service enable api-ssl"
+                "\n443 端口 → 需在 RouterOS 执行: /ip service enable www-ssl"
+                "\n也可用 Winbox → IP → Services → 启用 api 服务"
+            )
         elif "SSL" in err or "ssl" in err.lower() or "certificate" in err.lower():
             msg = "SSL 证书错误：尝试关闭 SSL 开关使用 HTTP 连接（端口改为 80）"
         elif "timeout" in err.lower() or "Timeout" in err:
