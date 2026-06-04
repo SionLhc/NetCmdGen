@@ -1,103 +1,104 @@
 <template>
-  <div class="ros-launcher">
-    <div class="ros-header">
-      <h2>RouterOS 设备管理器</h2>
-      <div style="display:flex;gap:8px">
-        <el-button type="primary" size="default" @click="showAdd=true">+ 添加设备</el-button>
-        <el-button size="default" @click="showTraffic=true" :disabled="!selectedDevice">📊 流量监控</el-button>
+  <div class="monitor-page">
+    <!-- 顶栏控制区 -->
+    <div class="top-bar">
+      <div class="bar-left">
+        <el-select v-model="deviceId" placeholder="选择设备" size="default" style="width:200px" @change="onDeviceChange">
+          <el-option v-for="d in devices" :key="d.id" :label="d.name||d.host" :value="d.id"/>
+        </el-select>
+        <el-select v-model="ifIndex" placeholder="接口" size="default" style="width:160px" :disabled="!deviceId" @change="restartMon">
+          <el-option v-for="f in interfaces" :key="f.index" :label="f.name" :value="f.index"/>
+        </el-select>
+        <div class="btn-group">
+          <button class="ctrl-btn play" @click="restartMon" :disabled="!ifIndex">▶ 开始</button>
+          <button class="ctrl-btn stop" @click="stopMon">⏹ 停止</button>
+        </div>
+      </div>
+      <div class="bar-center" v-if="monitoring">
+        <span class="live-dot"></span>
+        <span class="live-text">实时监控中</span>
+        <span class="live-count">{{ points.length }} 点</span>
+      </div>
+      <div class="bar-right">
+        <el-button size="default" @click="showAdd=true">+ 设备</el-button>
+        <span style="font-size:11px;color:#94a3b8">需路由器启用 SNMP: /snmp set enabled=yes; /snmp community add name=public</span>
       </div>
     </div>
 
-    <!-- 设备卡片网格 -->
-    <div class="device-grid">
-      <div
-        v-for="d in devices" :key="d.id"
-        class="device-card"
-        :class="{selected: selectedDevice?.id === d.id}"
-        @click="selectedDevice = d"
-        @dblclick="openWebfig(d)"
-      >
-        <div class="card-top">
-          <span class="card-name">{{ d.name || d.host }}</span>
-          <span class="card-status" :class="d.online !== false ? 'online' : 'offline'">
-            {{ d.online !== false ? '● 在线' : '○ 离线' }}
-          </span>
-        </div>
-        <div class="card-info">
-          <span>{{ d.host }}:{{ d.port }}</span>
-          <span>用户: {{ d.username }}</span>
-        </div>
-        <div class="card-actions" @click.stop>
-          <el-button size="small" link @click="openWebfig(d)">🔗 WebFig</el-button>
-          <el-button size="small" link @click="showTraffic=true">📊 流量</el-button>
-          <el-button size="small" link type="danger" @click="delDevice(d)">删除</el-button>
+    <!-- 即时速率卡片 -->
+    <div class="stat-cards" v-if="monitoring">
+      <div class="stat-card rx">
+        <div class="stat-icon">▼</div>
+        <div class="stat-body">
+          <div class="stat-label">下载速率</div>
+          <div class="stat-value">{{ currentRx }}</div>
+          <div class="stat-unit">Mbps</div>
         </div>
       </div>
-
-      <div v-if="!devices.length" class="empty-hint">
-        <p>暂未添加设备</p>
-        <p style="font-size:12px;color:#999">点击「添加设备」保存 RouterOS 信息，之后一键打开 WebFig</p>
+      <div class="stat-card tx">
+        <div class="stat-icon">▲</div>
+        <div class="stat-body">
+          <div class="stat-label">上传速率</div>
+          <div class="stat-value">{{ currentTx }}</div>
+          <div class="stat-unit">Mbps</div>
+        </div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-body">
+          <div class="stat-label">设备</div>
+          <div class="stat-value-sm">{{ currentDevice?.host }}</div>
+        </div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-body">
+          <div class="stat-label">接口</div>
+          <div class="stat-value-sm">{{ currentIfaceName }}</div>
+        </div>
       </div>
     </div>
 
-    <!-- 添加设备 -->
-    <el-dialog v-model="showAdd" title="添加 RouterOS 设备" width="400px">
-      <el-form label-width="80px">
-        <el-form-item label="名称"><el-input v-model="form.name" placeholder="Core-R1" /></el-form-item>
-        <el-form-item label="IP">
-          <el-input v-model="form.host" placeholder="192.168.88.1" />
-        </el-form-item>
+    <!-- 图表区：常驻 -->
+    <div class="chart-area">
+      <div ref="chartRef" class="chart-box"></div>
+      <div v-if="!monitoring && !deviceId" class="chart-hint">
+        <p>添加 RouterOS 设备并选择接口开始监控</p>
+      </div>
+      <div v-else-if="!monitoring" class="chart-hint">
+        <p>选择接口后点击「开始」监测实时流量</p>
+      </div>
+    </div>
+
+    <!-- 添加设备对话框 -->
+    <el-dialog v-model="showAdd" title="添加设备" width="360px">
+      <el-form label-width="60px" size="default">
+        <el-form-item label="名称"><el-input v-model="form.name" placeholder="Core-R1"/></el-form-item>
+        <el-form-item label="IP"><el-input v-model="form.host" placeholder="192.168.88.1"/></el-form-item>
         <el-form-item label="端口">
-          <el-select v-model="form.port" style="width:120px">
-            <el-option :value="80" label="80 (HTTP)" />
-            <el-option :value="443" label="443 (HTTPS)" />
-          </el-select>
-          <span style="font-size:11px;color:#909399;margin-left:8px">WebFig 端口</span>
+          <el-input-number v-model="form.port" :min="1" :max="65535"/>
+          <span style="font-size:11px;color:#909399;margin-left:8px">WebFig端口</span>
         </el-form-item>
-        <el-form-item label="用户名"><el-input v-model="form.user" placeholder="admin" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showAdd=false">取消</el-button>
-        <el-button type="primary" @click="saveDevice">保存</el-button>
+        <el-button type="primary" @click="saveDev">保存</el-button>
       </template>
-    </el-dialog>
-
-    <!-- 🆕 流量监控弹窗 -->
-    <el-dialog v-model="showTraffic" :title="`📊 实时流量 — ${selectedDevice?.name || selectedDevice?.host}`" width="860px" top="5vh">
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px" v-if="selectedDevice">
-        <el-select v-model="trafficIfIndex" placeholder="选择接口" size="small" style="width:180px" @change="restartMonitor">
-          <el-option v-for="iface in interfaces" :key="iface.index" :label="iface.name" :value="iface.index" />
-        </el-select>
-        <el-button size="small" @click="restartMonitor" :disabled="!trafficIfIndex">▶ 开始</el-button>
-        <el-button size="small" @click="stopMonitor" :disabled="!monitoring">⏹ 停止</el-button>
-        <span style="font-size:11px;color:#909399;margin-left:auto">需在 RouterOS 启用 SNMP: /snmp set enabled=yes; /snmp community add name=public</span>
-      </div>
-      <!-- 即时速率 -->
-      <div v-if="monitoring" style="display:flex;gap:24px;margin-bottom:10px;padding:8px 12px;background:#f8fafc;border-radius:6px">
-        <span style="font-weight:600">▼ 下载 <span style="color:#6366f1;font-size:18px">{{ currentRx }} Mbps</span></span>
-        <span style="font-weight:600">▲ 上传 <span style="color:#f59e0b;font-size:18px">{{ currentTx }} Mbps</span></span>
-        <span style="margin-left:auto;font-size:11px;color:#94a3b8">已采集 {{ trafficData.length }} 点</span>
-      </div>
-      <div ref="trafficChartRef" style="height:320px" v-show="monitoring"></div>
-      <div v-if="!monitoring" style="height:100px;display:flex;align-items:center;justify-content:center;color:#94a3b8">
-        选择接口后点击「开始」监测流量
-      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick, watch } from 'vue'
+import { ref, reactive, onMounted, nextTick, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as echarts from 'echarts'
 
 /* ── 设备管理 ── */
-interface Device { id: string; name: string; host: string; port: number; username: string; online?: boolean }
-const devices = ref<Device[]>([])
-const selectedDevice = ref<Device | null>(null)
+interface Dev { id: string; name: string; host: string; port: number }
+const devices = ref<Dev[]>([])
+const deviceId = ref('')
+const currentDevice = computed(() => devices.value.find(d => d.id === deviceId.value))
+
+const form = reactive({ name: '', host: '', port: 443 })
 const showAdd = ref(false)
-const form = reactive({ name: '', host: '', port: 443, user: 'admin' })
-const showTraffic = ref(false)
 
 onMounted(loadDevices)
 
@@ -105,136 +106,167 @@ async function loadDevices() {
   try { const r = await fetch('/api/ros/devices'); devices.value = await r.json() } catch {}
 }
 
-async function saveDevice() {
+async function saveDev() {
   if (!form.host) { ElMessage.warning('请输入IP'); return }
-  await fetch('/api/ros/devices', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: form.name, host: form.host, port: form.port, username: form.user, password: '' }) })
-  form.name = form.host = ''; form.port = 443
-  showAdd.value = false
-  await loadDevices()
-  ElMessage.success('已保存')
+  await fetch('/api/ros/devices',{method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:form.name,host:form.host,port:form.port,username:'admin',password:''})})
+  form.name = form.host = ''; showAdd.value = false
+  await loadDevices(); ElMessage.success('已保存')
 }
 
-async function delDevice(d: Device) {
-  await ElMessageBox.confirm(`删除 ${d.name || d.host}？`, '确认', { type: 'warning' })
-  await fetch(`/api/ros/devices/${d.id}`, { method: 'DELETE' })
-  if (selectedDevice.value?.id === d.id) selectedDevice.value = null
-  await loadDevices()
-}
+/* ── 接口列表 ── */
+interface Iface { index: number; name: string; speed: number; speed_label: string }
+const interfaces = ref<Iface[]>([])
+const ifIndex = ref(0)
+const currentIfaceName = computed(() =>
+  interfaces.value.find(f => f.index === ifIndex.value)?.name || '')
 
-function openWebfig(d: Device) {
-  const proto = d.port === 443 ? 'https' : 'http'
-  window.open(`${proto}://${d.host}:${d.port}`, '_blank')
+async function onDeviceChange() {
+  stopMon()
+  interfaces.value = []
+  ifIndex.value = 0
+  if (!deviceId.value) return
+  const d = currentDevice.value!
+  try {
+    const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`)
+    interfaces.value = await r.json()
+    if (interfaces.value.length) ifIndex.value = interfaces.value[0].index
+  } catch { ElMessage.error('获取接口失败') }
 }
 
 /* ── 流量监控 ── */
-const trafficIfIndex = ref(0)
-const interfaces = ref<any[]>([])
 const monitoring = ref(false)
 const currentRx = ref(0)
 const currentTx = ref(0)
-const trafficData = ref<any[]>([])
-const trafficChartRef = ref<HTMLDivElement>()
-let trafficChart: echarts.ECharts | null = null
+const points = ref<{ts:number; rx:number; tx:number}[]>([])
+const chartRef = ref<HTMLDivElement>()
+let chart: echarts.ECharts | null = null
 let abortCtrl: AbortController | null = null
 
-watch(showTraffic, async (val) => {
-  if (val && selectedDevice.value) {
-    stopMonitor()
-    // 加载接口列表
-    try {
-      const r = await fetch(`/api/ros/traffic/interfaces?host=${selectedDevice.value.host}`)
-      interfaces.value = await r.json()
-      if (interfaces.value.length > 0) trafficIfIndex.value = interfaces.value[0].index
-    } catch { interfaces.value = [] }
-  }
-})
+watch(() => points.value.length, () => { nextTick(renderChart) })
 
-async function restartMonitor() {
-  stopMonitor()
+function renderChart() {
+  if (!chartRef.value) return
+  if (!chart) chart = echarts.init(chartRef.value)
+  const data = [...points.value]
+  const ts = data.map((d:any) => new Date(d.ts*1000).toLocaleTimeString())
+  chart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['下载', '上传'], bottom: 0, textStyle: { fontSize: 11 } },
+    grid: { top: 12, right: 16, bottom: 32, left: 50 },
+    xAxis: { type: 'category', data: ts, axisLabel: { fontSize: 10, color: '#94a3b8' } },
+    yAxis: { type: 'value', name: 'Mbps', nameTextStyle: { fontSize: 10, color: '#94a3b8' },
+      axisLabel: { fontSize: 10, color: '#94a3b8' }, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+    series: [
+      { name: '下载', type: 'line', data: data.map(d=>d.rx), smooth: true, symbol: 'none',
+        lineStyle: { color: '#6366f1', width: 2 },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,
+          [{offset:0,color:'rgba(99,102,241,.18)'},{offset:1,color:'rgba(99,102,241,0)'}]) } },
+      { name: '上传', type: 'line', data: data.map(d=>d.tx), smooth: true, symbol: 'none',
+        lineStyle: { color: '#f59e0b', width: 2 },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,
+          [{offset:0,color:'rgba(245,158,11,.18)'},{offset:1,color:'rgba(245,158,11,0)'}]) } },
+    ],
+  }, true)
+}
+
+function stopMon() {
+  abortCtrl?.abort()
+  abortCtrl = null
+  monitoring.value = false
+}
+
+async function restartMon() {
+  stopMon()
+  if (!deviceId.value || !ifIndex.value) return
   monitoring.value = true
-  trafficData.value = []
+  points.value = []
   currentRx.value = 0; currentTx.value = 0
   abortCtrl = new AbortController()
-  const d = selectedDevice.value!
-  const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${trafficIfIndex.value}&duration_s=120`
+  const d = currentDevice.value!
 
   try {
+    const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${ifIndex.value}&duration_s=300`
     const resp = await fetch(url, { signal: abortCtrl.signal })
     const reader = resp.body!.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
+    const dec = new TextDecoder()
+    let buf = ''
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
+      buf += dec.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() || ''
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
-            const point = JSON.parse(line.slice(6))
-            if (point.rx_mbps !== undefined) {
-              trafficData.value.push(point)
-              currentRx.value = point.rx_mbps
-              currentTx.value = point.tx_mbps
-              await nextTick(); updateTrafficChart()
+            const pt = JSON.parse(line.slice(6))
+            if (pt.rx_mbps !== undefined) {
+              points.value.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
+              currentRx.value = pt.rx_mbps
+              currentTx.value = pt.tx_mbps
             }
           } catch {}
         }
       }
     }
-  } catch { /* aborted or error */ }
+  } catch { /* aborted */ }
   finally { monitoring.value = false }
-}
-
-function stopMonitor() {
-  abortCtrl?.abort()
-  monitoring.value = false
-}
-
-function updateTrafficChart() {
-  if (!trafficChartRef.value) return
-  if (!trafficChart) trafficChart = echarts.init(trafficChartRef.value)
-  const ts = trafficData.value.map((d: any) => new Date(d.ts * 1000).toLocaleTimeString())
-  const rx = trafficData.value.map((d: any) => d.rx_mbps)
-  const tx = trafficData.value.map((d: any) => d.tx_mbps)
-
-  trafficChart.setOption({
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['下载', '上传'], bottom: 0 },
-    grid: { top: 8, right: 12, bottom: 28, left: 44 },
-    xAxis: { type: 'category', data: ts, axisLabel: { fontSize: 10 } },
-    yAxis: { type: 'value', name: 'Mbps', nameTextStyle: { fontSize: 10 } },
-    series: [
-      { name: '下载', type: 'line', data: rx, smooth: true, symbol: 'none', lineStyle: { color: '#6366f1', width: 2 },
-        areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(99,102,241,.2)'},{offset:1,color:'rgba(99,102,241,0)'}]) } },
-      { name: '上传', type: 'line', data: tx, smooth: true, symbol: 'none', lineStyle: { color: '#f59e0b', width: 2 },
-        areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(245,158,11,.2)'},{offset:1,color:'rgba(245,158,11,0)'}]) } },
-    ],
-  }, true)
 }
 </script>
 
 <style scoped>
-.ros-launcher { padding: 24px; max-width: 900px; margin: 0 auto; }
-.ros-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.ros-header h2 { margin: 0; font-size: 18px; color: #1e293b; }
-.device-grid { display: flex; flex-wrap: wrap; gap: 12px; }
-.device-card {
-  width: 260px; padding: 14px; background: #fff; border: 1px solid #e2e8f0;
-  border-radius: 8px; cursor: pointer; transition: all .15s;
+.monitor-page {
+  padding: 20px 24px; height: calc(100vh - 60px);
+  display: flex; flex-direction: column; gap: 16px;
+  background: #f8fafc; font-family: 'Inter', 'Microsoft YaHei', sans-serif;
 }
-.device-card:hover { border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,.1); }
-.device-card.selected { border-color: #3b82f6; background: #eff6ff; }
-.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.card-name { font-weight: 600; font-size: 14px; }
-.card-status { font-size: 11px; padding: 2px 6px; border-radius: 4px; }
-.card-status.online { color: #10b981; background: rgba(16,185,129,.1); }
-.card-status.offline { color: #94a3b8; background: rgba(148,163,184,.1); }
-.card-info { font-size: 11px; color: #64748b; display: flex; flex-direction: column; gap: 2px; }
-.card-actions { margin-top: 10px; display: flex; gap: 4px; border-top: 1px solid #f1f5f9; padding-top: 8px; }
-.empty-hint { width: 100%; text-align: center; padding: 40px; color: #64748b; }
+/* 顶栏 */
+.top-bar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px; background: #fff; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.bar-left { display: flex; align-items: center; gap: 10px; }
+.btn-group { display: flex; gap: 4px; }
+.ctrl-btn {
+  border: none; padding: 7px 14px; border-radius: 6px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.ctrl-btn.play { background: #6366f1; color: #fff; }
+.ctrl-btn.play:hover { background: #4f46e5; }
+.ctrl-btn.play:disabled { background: #cbd5e1; cursor: default; }
+.ctrl-btn.stop { background: #fee2e2; color: #ef4444; }
+.ctrl-btn.stop:hover { background: #fecaca; }
+.bar-center { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.live-text { font-size: 12px; font-weight: 600; color: #10b981; }
+.live-count { font-size: 11px; color: #94a3b8; }
+.bar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+/* 速率卡片 */
+.stat-cards { display: flex; gap: 12px; }
+.stat-card {
+  flex: 1; padding: 16px 20px; border-radius: 10px; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04); display: flex; align-items: center; gap: 14px;
+}
+.stat-card.rx { border-left: 4px solid #6366f1; }
+.stat-card.tx { border-left: 4px solid #f59e0b; }
+.stat-card.info { border-left: 4px solid #e2e8f0; }
+.stat-icon { font-size: 20px; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; background: #f1f5f9; color: #64748b; }
+.stat-body { display: flex; flex-direction: column; }
+.stat-label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+.stat-value { font-size: 28px; font-weight: 700; color: #1e293b; font-family: monospace; line-height: 1.1; }
+.stat-unit { font-size: 11px; color: #94a3b8; }
+.stat-value-sm { font-size: 15px; font-weight: 600; color: #1e293b; font-family: monospace; }
+
+/* 图表 */
+.chart-area { flex: 1; position: relative; background: #fff; border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04); overflow: hidden; }
+.chart-box { width: 100%; height: 100%; }
+.chart-hint { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; color: #94a3b8; font-size: 13px; }
 </style>
