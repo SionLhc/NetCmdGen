@@ -55,6 +55,11 @@
             </svg>
             停止
           </el-button>
+          <el-button
+            v-if="!isRunning && results.length > 0"
+            size="default"
+            @click="exportCsv"
+          >📥 导出 CSV</el-button>
         </div>
       </div>
 
@@ -84,8 +89,11 @@
           </span>
           <span class="stat-item">
             <span class="stat-label">平均</span>
-            <span class="stat-value" style="color:#8b5cf6">{{ avgRtt != null ? avgRtt + 'ms' : '--' }}</span>
+            <span class="stat-value" :style="{ color: avgRtt != null && avgRtt > 100 ? '#ef4444' : '#8b5cf6' }">{{ avgRtt != null ? avgRtt + 'ms' : '--' }}</span>
           </span>
+          <!-- 告警阈值提示 -->
+          <span v-if="avgRtt != null && avgRtt > 100" class="stat-alert">⚠ RTT 偏高</span>
+          <span v-if="lossPercent > 10" class="stat-alert">⚠ 丢包严重</span>
         </div>
         <!-- 丢包率进度条 -->
         <div class="loss-bar-wrap">
@@ -98,7 +106,15 @@
       </div>
     </div>
 
-    <!-- 核心图表区域：双栏布局（图表 + 实时列表） -->
+    <!-- 空状态 -->
+    <div v-if="results.length === 0 && !isRunning" class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>
+      </svg>
+      <p>输入目标地址，点击"开始 Ping"进行网络连通性探测</p>
+    </div>
+
+    <!-- 核心图表区域：双栏布局，v-if 控制整个区域显隐 -->
     <div v-if="results.length > 0" class="probe-body">
       <!-- 左侧：延迟波动图 -->
       <div class="chart-panel">
@@ -155,14 +171,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 空状态 -->
-    <div v-else-if="!isRunning" class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>
-      </svg>
-      <p>输入目标地址，点击"开始 Ping"进行网络连通性探测</p>
-    </div>
   </div>
 </template>
 
@@ -212,6 +220,7 @@ function startPing() {
     ElMessage.warning('请输入目标地址')
     return
   }
+  const currentTarget = target.value.trim()  // 闭包捕获，防止回调时值被修改
   results.value = []
   isRunning.value = true
 
@@ -225,10 +234,19 @@ function startPing() {
         scrollToBottom()
       })
     },
-    // onDone — 完成后最终更新
+    // onDone — 完成后最终更新 + 保存历史
     (data) => {
       results.value = [...data.results]
       isRunning.value = false
+      // 保存历史记录（使用捕获的目标值）
+      const saveParams = new URLSearchParams({
+        diagnostic_type: 'ping',
+        target: currentTarget,
+        avg_rtt: String(data.avg_rtt ?? 0),
+        loss_percent: String(data.loss_percent ?? 0),
+        status: data.loss_percent === 100 ? 'error' : 'ok',
+      })
+      fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
       nextTick(() => {
         updateChart()
         scrollToBottom()
@@ -241,6 +259,19 @@ function startPing() {
       ElMessage.error('Ping 失败: ' + (err?.message || '未知错误'))
     }
   )
+}
+
+/** 导出 Ping 结果为 CSV */
+function exportCsv() {
+    const header = '序号,RTT(ms),状态'
+    const rows = results.value.map(r => `${r.seq},${r.rtt ?? '超时'},${r.status}`)
+    const csv = [header, ...rows].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `ping-${target.value}-${new Date().toISOString().slice(0,10)}.csv`
+    link.click()
+    ElMessage.success('CSV 已导出')
 }
 
 function stopPing() {
@@ -256,9 +287,20 @@ function stopPing() {
 function updateChart() {
   if (!chartRef.value) return
   if (!chartInstance) {
-    chartInstance = echarts.init(chartRef.value!)
+    // 用 rAF 延迟首次初始化，确保 Grid 布局已计算完毕，容器宽高不为 0
+    requestAnimationFrame(() => {
+      if (!chartRef.value) return
+      if (!chartInstance) chartInstance = echarts.init(chartRef.value!)
+      renderChartData()
+    })
+    return
   }
+  renderChartData()
+}
 
+/** 将 results 数据渲染到 ECharts 图表 */
+function renderChartData() {
+  if (!chartInstance) return
   const seqs = results.value.map(r => `#${r.seq}`)
   const rtts = results.value.map(r => r.rtt ?? null)
   const avg = avgRtt.value
@@ -313,7 +355,7 @@ function updateChart() {
       } : undefined,
       connectNulls: false,
     }],
-  }, true)
+  }, true)  // notMerge = true，每次全量替换数据确保同步
 }
 
 /* 滚动到最新数据 */
@@ -375,6 +417,7 @@ onUnmounted(() => {
 .stat-item { display: flex; align-items: center; gap: 4px; }
 .stat-label { font-size: 11px; color: #94a3b8; }
 .stat-value { font-size: 14px; font-weight: 700; font-family: monospace; }
+.stat-alert { font-size: 11px; color: #ef4444; font-weight: 600; padding: 2px 6px; background: rgba(239,68,68,0.08); border-radius: 4px; }
 
 .loss-bar-wrap { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .loss-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; display: flex; }

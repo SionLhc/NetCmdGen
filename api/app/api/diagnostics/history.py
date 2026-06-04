@@ -98,11 +98,30 @@ def get_history(
     target_list = [t.strip() for t in targets.split(",") if t.strip()]
     if not target_list:
         raise HTTPException(400, "至少需要一个目标")
-    if diagnostic_type not in ("ping", "traceroute", "dns", "tcp-port", "http", "jitter"):
+    if diagnostic_type not in ("ping", "traceroute", "dns", "tcp-port", "http", "mtu", "jitter"):
         raise HTTPException(400, f"不支持的诊断类型: {diagnostic_type}")
 
     records = _query_history(target_list, diagnostic_type, days)
     return {"records": records, "targets": target_list, "type": diagnostic_type, "days": days}
+
+
+@router.get("/targets", summary="获取已保存的目标列表")
+def get_targets(
+    diagnostic_type: str = Query(default="ping"),
+    days: int = Query(default=30, ge=1, le=90),
+):
+    """返回指定诊断类型下的所有历史目标"""
+    conn = _get_db()
+    since = (datetime.now() - timedelta(days=days)).isoformat()
+    cursor = conn.execute(
+        """SELECT DISTINCT target FROM diagnostics
+           WHERE diagnostic_type = ? AND created_at >= ?
+           ORDER BY target""",
+        (diagnostic_type, since),
+    )
+    targets = [r[0] for r in cursor.fetchall()]
+    conn.close()
+    return {"targets": targets}
 
 
 @router.get("/save", summary="手动保存诊断记录")

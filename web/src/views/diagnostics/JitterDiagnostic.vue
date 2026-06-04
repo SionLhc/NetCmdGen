@@ -33,7 +33,7 @@
     </div>
 
     <!-- ECharts Jitter 图 -->
-    <div ref="chartRef" style="width:100%;height:320px;margin-top:16px" v-show="results.length"></div>
+    <div ref="chartRef" style="width:100%;height:320px;margin-top:16px"></div>
 
     <!-- 实时列表 -->
     <el-table :data="recentResults" style="margin-top:12px" v-if="recentResults.length" size="small" max-height="300" border>
@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useSseStream } from '@/composables/useSseStream'
 import * as echarts from 'echarts'
 
@@ -72,8 +73,9 @@ let chart: echarts.ECharts | null = null
 
 interface JitterItem { seq: number; rtt_ms: number; jitter_ms: number; lost: boolean; loss_count: number; avg_rtt: number }
 const results = ref<JitterItem[]>([])
-const sseUrl = computed(() => `/api/v1/diagnostics/jitter/stream?target=${encodeURIComponent(target.value)}&packet_count=${packetCount.value}&interval_ms=${intervalMs.value}`)
-const { isRunning, start, stop } = useSseStream<JitterItem>(sseUrl as any)
+const sseUrl = computed(() => `/api/diagnostics/jitter/stream?target=${encodeURIComponent(target.value)}&packet_count=${packetCount.value}&interval_ms=${intervalMs.value}`)
+const stream = useSseStream<JitterItem>(sseUrl)
+const { isRunning, stop } = stream
 
 const recentResults = computed(() => results.value.slice(-50))
 const lossCount = computed(() => results.value.filter(r => r.lost).length)
@@ -102,14 +104,43 @@ watch(results, async () => {
             { name: 'Jitter(ms)', type: 'line', yAxisIndex: 1, data: jitters, smooth: true, symbol: 'none', lineStyle: { color: '#e6a23c' } },
         ],
         grid: { left: 50, right: 50, top: 40, bottom: 40 },
-    }, { notMerge: true })
-}, { deep: false })
+    }, true)
+}, { deep: true })  // deep:true 确保 push 操作触发 watch 回调
+
+function updateChartDirectly(d: JitterItem) {
+    // 直接在回调里更新图表，不依赖 watch（更即时）
+    if (!chartRef.value) return
+    if (!chart) chart = echarts.init(chartRef.value)
+    const seqs = results.value.map(r => r.seq)
+    const rtts = results.value.map(r => r.lost ? null : r.rtt_ms)
+    const jitters = results.value.map(r => r.jitter_ms)
+    chart.setOption({
+        series: [
+            { data: rtts },
+            { data: jitters },
+        ],
+        xAxis: { data: seqs },
+    })
+}
 
 function startDiag() {
+    const currentTarget = target.value.trim()
     results.value = []
-    const s = useSseStream<JitterItem>(sseUrl.value)
-    s.onProgress = (d) => { results.value.push(d) }
-    s.start()
+    stream.onProgress = (d: JitterItem) => { results.value.push(d); updateChartDirectly(d) }
+    stream.onError = (e: string) => { ElMessage.error('抖动分析失败: ' + e) }
+    stream.onComplete = () => {
+        const validRtts = results.value.filter(r => !r.lost && r.rtt_ms > 0).map(r => r.rtt_ms)
+        const avgRtt = validRtts.length ? +(validRtts.reduce((a,b)=>a+b,0)/validRtts.length).toFixed(1) : 0
+        const lost = results.value.filter(r => r.lost).length
+        const lossPercent = results.value.length ? +((lost / results.value.length) * 100).toFixed(1) : 0
+        const saveParams = new URLSearchParams({
+            diagnostic_type: 'jitter', target: currentTarget,
+            avg_rtt: String(avgRtt), loss_percent: String(lossPercent),
+            status: 'ok',
+        })
+        fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
+    }
+    stream.start()
 }
 
 onMounted(() => {

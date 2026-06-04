@@ -79,6 +79,7 @@
           </el-dropdown>
           <el-button @click="sshVisible = true" size="default" :disabled="allOutputs.length===0">SSH下发</el-button>
           <el-button @click="onClear" size="default">清空</el-button>
+          <el-button @click="handleAudit" size="default" type="warning">🔍 安全审计</el-button>
         </div>
       </div>
 
@@ -257,6 +258,23 @@
       </el-table>
       <div style="margin-top:10px;font-size:12px;color:#909399">点击行直接加载参数并关闭</div>
       <template #footer><el-button @click="topoImportVisible = false">关闭</el-button></template>
+    </el-dialog>
+
+    <!-- 安全审计结果对话框 -->
+    <el-dialog v-model="auditVisible" title="🔍 配置安全审计" width="550px">
+      <div v-if="auditResult" style="text-align:center;margin-bottom:16px">
+        <span style="font-size:48px;font-weight:700" :style="{color:auditResult.score>=80?'#10b981':auditResult.score>=50?'#f59e0b':'#ef4444'}">{{ auditResult.score }}</span>
+        <span style="font-size:14px;color:#64748b"> / 100</span>
+        <div style="font-size:13px;color:#64748b;margin-top:4px">{{ auditResult.summary }}</div>
+      </div>
+      <div v-if="auditResult?.issues?.length">
+        <div v-for="(item, i) in auditResult.issues" :key="i" style="padding:6px 0;display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid #f1f5f9">
+          <el-tag :type="item.level==='critical'?'danger':item.level==='warning'?'warning':'info'" size="small">{{ item.level==='critical'?'严重':item.level==='warning'?'警告':'建议' }}</el-tag>
+          <span style="font-size:13px;flex:1">{{ item.message }}</span>
+          <code style="font-size:11px;color:#94a3b8;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.line }}</code>
+        </div>
+      </div>
+      <template #footer><el-button @click="auditVisible=false">关闭</el-button></template>
     </el-dialog>
   </div>
 </template>
@@ -509,7 +527,7 @@ async function onCompareAll() {
 
 function onCopyAll() { const idx = Number(activeOutputTab.value); const out = allOutputs.value[idx]; if (out) { navigator.clipboard.writeText(out.output); ElMessage.success('已复制') } }
 function copyOne(text: string) { navigator.clipboard.writeText(text); ElMessage.success('已复制') }
-function onClear() { allOutputs.value = []; Object.keys({formBasic,formVlan,formWan,formDhcp,formNat,formAcl,formPolicy,formRouting,formSecurity,formInterface,formQos,formService}).forEach(k => (eval(k).value = {})); showDiff.value = false }
+function onClear() { allOutputs.value = []; [formBasic,formVlan,formWan,formDhcp,formNat,formAcl,formPolicy,formRouting,formSecurity,formInterface,formQos,formService].forEach(r => { r.value = {} }); showDiff.value = false }
 function formatDiff(output: string): string { return output.split('\n').map((line,i)=>`${String(i+1).padStart(4,' ')}  ${line}`).join('\n') }
 
 /** 计算行级 diff：相同行绿色、差异行黄色、仅此厂商有蓝色 */
@@ -629,6 +647,22 @@ function handleExportExcel() {
   const hostname = formBasic.value.hostname || 'NetCmdGen'
   XLSX.writeFile(wb, `${hostname}_config_compare.xlsx`)
   ElMessage.success('Excel 已导出')
+}
+
+// 安全审计
+const auditVisible = ref(false)
+const auditResult = ref<any>(null)
+async function handleAudit() {
+    const out = allOutputs.value[0]
+    if (!out?.output) { ElMessage.warning('请先生成命令'); return }
+    try {
+        const res = await fetch('/api/audit/check', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commands: out.output }),
+        })
+        auditResult.value = await res.json()
+        auditVisible.value = true
+    } catch { ElMessage.error('审计失败') }
 }
 
 // 拓扑导入

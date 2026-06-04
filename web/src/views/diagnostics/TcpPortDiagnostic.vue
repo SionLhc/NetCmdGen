@@ -65,6 +65,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useSseStream } from '@/composables/useSseStream'
 
 const target = ref('')
@@ -73,17 +74,29 @@ const timeoutMs = ref(3000)
 
 interface PortItem { port: number; open: boolean; service: string; description: string; rtt_ms: number; risk: string }
 const results = ref<PortItem[]>([])
-const sseUrl = computed(() => `/api/v1/diagnostics/tcp-port/stream?target=${encodeURIComponent(target.value)}&ports=${encodeURIComponent(ports.value)}&timeout_ms=${timeoutMs.value}`)
-const { isRunning, progress, total, start, stop } = useSseStream<PortItem>(sseUrl as any)
+const sseUrl = computed(() => `/api/diagnostics/tcp-port/stream?target=${encodeURIComponent(target.value)}&ports=${encodeURIComponent(ports.value)}&timeout_ms=${timeoutMs.value}`)
+const stream = useSseStream<PortItem>(sseUrl)
+const { isRunning, progress, total, stop } = stream
 
 const pct = computed(() => total.value ? Math.round(progress.value / total.value * 100) : 0)
 const openCount = computed(() => results.value.filter(r => r.open).length)
 
 function startDiag() {
+    const currentTarget = target.value.trim()
     results.value = []
-    const s = useSseStream<PortItem>(sseUrl.value)
-    s.onProgress = (d) => { results.value.push(d) }
-    s.start()
+    stream.onProgress = (d: PortItem) => { results.value.push(d) }
+    stream.onError = (e: string) => { ElMessage.error('端口检测失败: ' + e) }
+    stream.onComplete = () => {
+        const validRtts = results.value.filter(r => r.open && r.rtt_ms > 0).map(r => r.rtt_ms)
+        const avgRtt = validRtts.length ? +(validRtts.reduce((a,b)=>a+b,0)/validRtts.length).toFixed(1) : 0
+        const saveParams = new URLSearchParams({
+            diagnostic_type: 'tcp-port', target: currentTarget,
+            avg_rtt: String(avgRtt), loss_percent: '0',
+            status: 'ok',
+        })
+        fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
+    }
+    stream.start()
 }
 </script>
 

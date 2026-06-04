@@ -14,6 +14,7 @@
             <el-option label="DNS" value="dns" />
             <el-option label="TCP端口" value="tcp-port" />
             <el-option label="HTTP" value="http" />
+            <el-option label="MTU" value="mtu" />
             <el-option label="Jitter" value="jitter" />
           </el-select>
         </el-form-item>
@@ -85,8 +86,10 @@ let chart: echarts.ECharts | null = null
 
 async function loadHistory() {
     loading.value = true
+    try {
     const params = new URLSearchParams({ targets: targets.value.join(','), diagnostic_type: diagType.value, days: String(days.value) })
-    const res = await fetch(`/api/v1/diagnostics/history?${params}`)
+    const res = await fetch(`/api/diagnostics/history?${params}`)
+    if (!res.ok) throw new Error('请求失败')
     const data = await res.json()
     records.value = data.records || []
 
@@ -114,10 +117,14 @@ async function loadHistory() {
     }
     anomalies.value = anoms.slice(0, 20)
 
-    // 画 ECharts
+    // 画 ECharts — v-show 从隐藏变为可见后，需要重新计算尺寸
     await nextTick()
     if (!chartRef.value) return
-    if (!chart) chart = echarts.init(chartRef.value)
+    if (!chart) {
+        chart = echarts.init(chartRef.value)
+    } else {
+        chart.resize()  // v-show 之前为 false 时 init 拿到 0x0 尺寸，resize 修复
+    }
 
     // 按时间分组
     const series: any[] = []
@@ -153,11 +160,25 @@ async function loadHistory() {
     })
 
     loading.value = false
+    } catch {
+        records.value = []
+        loading.value = false
+    }
 }
 
 onMounted(() => {
     if (chartRef.value) chart = echarts.init(chartRef.value)
+    // 自动加载已保存的目标列表
+    loadTargets()
 })
+/** 从后端加载已有的目标列表填入下拉框 */
+async function loadTargets() {
+    try {
+        const res = await fetch(`/api/diagnostics/history/targets?diagnostic_type=${diagType.value}&days=30`)
+        const data = await res.json()
+        targets.value = data.targets || []
+    } catch { /* 忽略 */ }
+}
 </script>
 
 <style scoped>

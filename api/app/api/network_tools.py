@@ -412,14 +412,13 @@ def traceroute_stream(
                     rtt = None
 
                     if system == "Windows":
-                        # Windows: "来自 192.168.1.1 的回复: 字节=32 时间<1ms TTL=64"
-                        ip_re = re.search(r"来自\s+(\d+\.\d+\.\d+\.\d+)", output)
-                        time_re = re.search(r"时间[=<]\s*(\d+)\s*ms", output)
-                        if not time_re:
-                            time_re = re.search(r"time[=<]\s*(\d+)\s*ms", output)
+                        # 中英文双兼容：Reply from / 来自 + IP
+                        ip_re = re.search(r"(?:Reply from|来自)\s+(\d+\.\d+\.\d+\.\d+)", output)
+                        # 时间: time=/时间= + 数字 + ms
+                        time_re = re.search(r"(?:time|时间)[=<]\s*(\d+)\s*ms", output)
                         if not ip_re:
-                            # TTL 过期: "来自 10.0.0.1 的回复：TTL 传输中过期。"
-                            ip_re = re.search(r"来自\s+(\d+\.\d+\.\d+\.\d+).*TTL.*过期", output)
+                            # TTL 过期兜底：Reply from / 来自 + IP + TTL + expired/过期
+                            ip_re = re.search(r"(?:Reply from|来自)\s+(\d+\.\d+\.\d+\.\d+).*TTL.*(?:expired|过期)", output)
                     else:
                         # Linux: "From 192.168.1.1 icmp_seq=1 Time to live exceeded"
                         # 或 "64 bytes from 8.8.8.8: icmp_seq=1 ttl=117 time=12.3 ms"
@@ -433,8 +432,10 @@ def traceroute_stream(
                         if rtt < 0.5:
                             rtt = 0.5
 
-                    # 判断是否到达目标
-                    if proc.returncode == 0 and "TTL" not in output:
+                    # 判断是否到达目标: 成功 echo-reply（不是 TTL 过期）
+                    # 关键: 成功到达输出含 "TTL=XX"，TTL 过期输出含 "过期"/"expired"
+                    ttl_exceeded = ("过期" in output or "expired" in output.lower() or "exceeded" in output.lower())
+                    if proc.returncode == 0 and not ttl_exceeded:
                         reached_target = True
 
                     hop_rtts.append(round(rtt, 1) if rtt else None)

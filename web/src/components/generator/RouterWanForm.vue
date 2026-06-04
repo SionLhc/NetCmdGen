@@ -115,6 +115,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, watch, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{ modelValue: Record<string, any>; vendor?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [v: Record<string, any>] }>()
@@ -220,6 +221,20 @@ const fullPreview = computed(() => {
 
 // ─── emit ─────────────────────────────────────────
 function emitUpdate() {
+  // IP 格式校验
+  const ipPattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
+  for (const l of wanLines) {
+    if (l.connectionType === 'static') {
+      const ip = (l as any).staticIp || ''
+      const gw = (l as any).gateway || ''
+      if (ip && !ipPattern.test(ip)) {
+        ElMessage.error(`WAN 线路 IP 格式错误: ${ip}`); return
+      }
+      if (gw && !ipPattern.test(gw)) {
+        ElMessage.error(`WAN 线路网关格式错误: ${gw}`); return
+      }
+    }
+  }
   emit('update:modelValue', {
     wanLines: wanLines.map(l => ({ ...l })),
     natEnabled: natEnabled.value,

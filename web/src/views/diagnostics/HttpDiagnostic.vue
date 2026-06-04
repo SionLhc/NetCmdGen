@@ -61,55 +61,47 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useSseStream } from '@/composables/useSseStream'
 
 const url = ref('https://baidu.com')
 const method = ref('GET')
 const followRedirects = ref(true)
 const checkSsl = ref(true)
-const isRunning = ref(false)
 const logs = ref<string[]>([])
 const result = ref<any>(null)
-let controller: AbortController | null = null
+
+const sseUrl = computed(() => {
+    const p = new URLSearchParams({
+        url: url.value, method: method.value,
+        follow_redirects: String(followRedirects.value),
+        check_ssl: String(checkSsl.value),
+    })
+    return `/api/diagnostics/http/stream?${p}`
+})
+const stream = useSseStream<any>(sseUrl)
+const { isRunning, stop } = stream
 
 function startDiag() {
-    controller?.abort()
-    isRunning.value = true
+    const currentTarget = url.value.trim()
     logs.value = []
     result.value = null
-    controller = new AbortController()
-
-    const params = new URLSearchParams({ url: url.value, method: method.value, follow_redirects: String(followRedirects.value), check_ssl: String(checkSsl.value) })
-    const fullUrl = `/api/v1/diagnostics/http/stream?${params}`
-
-    fetch(fullUrl, { signal: controller.signal }).then(async (response) => {
-        const reader = response.body?.getReader()
-        if (!reader) return
-        const decoder = new TextDecoder()
-        let buf = ''
-        while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            buf += decoder.decode(value, { stream: true })
-            const lines = buf.split('\n')
-            buf = lines.pop() || ''
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(line.slice(6))
-                        if (data.type === 'progress') {
-                            if (data.data.message) logs.value.push(data.data.message)
-                            if (data.data.status_code) result.value = data.data
-                        } else if (data.type === 'complete') {
-                            isRunning.value = false
-                        }
-                    } catch {}
-                }
-            }
-        }
-    }).catch((err) => {
-        if (err.name !== 'AbortError') logs.value.push('请求失败: ' + String(err))
-    }).finally(() => { isRunning.value = false })
+    stream.onProgress = (d: any) => {
+        if (d.message) logs.value.push(d.message)
+        if (d.status_code !== undefined) result.value = d
+    }
+    stream.onError = (e: string) => { console.error('HTTP 检测失败: ' + e) }
+    stream.onComplete = () => {
+        const rtt = result.value?.rtt_ms ?? 0
+        const status = result.value?.status_code ? 'ok' : 'error'
+        const saveParams = new URLSearchParams({
+            diagnostic_type: 'http', target: currentTarget,
+            avg_rtt: String(typeof rtt === 'number' ? rtt : 0), loss_percent: '0',
+            status,
+        })
+        fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
+    }
+    stream.start()
 }
 </script>
 

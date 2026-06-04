@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import socket
 import time
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Query, HTTPException
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/tcp-port", tags=["diagnostics-tcp"])
 
@@ -82,18 +83,29 @@ async def tcp_port_stream(
     timeout_s = timeout_ms / 1000.0
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        results = []
         for i, port in enumerate(port_list):
             r = await _tcp_connect(target, port, timeout_s)
-            yield f"""event: progress
-data: {{"type":"progress","data":{{"port":{r["port"]},"open":{str(r["open"]).lower()},"rtt_ms":{r["rtt_ms"]},"service":"{r["service"]}","description":"{r["description"]}","risk":"{r["risk"]}"}},"progress":{i+1},"total":{total}}}
-
-"""
+            results.append(r)
+            payload = json.dumps({
+                "type": "progress",
+                "data": {
+                    "port": r["port"], "open": r["open"], "rtt_ms": r["rtt_ms"],
+                    "service": r["service"], "description": r["description"],
+                    "risk": r["risk"],
+                },
+                "progress": i + 1,
+                "total": total,
+            }, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
             await asyncio.sleep(0.03)
 
-        open_count = sum(1 for p in port_list if True)  # placeholder
-        yield f"""event: complete
-data: {{"type":"complete","status":"done","total":{total},"target":"{target}"}}
+        open_count = sum(1 for r in results if r["open"])
+        payload = json.dumps({
+            "type": "complete", "status": "done",
+            "total": total, "open_count": open_count,
+            "target": target,
+        }, ensure_ascii=False)
+        yield f"data: {payload}\n\n"
 
-"""
-
-    return EventSourceResponse(event_generator())
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

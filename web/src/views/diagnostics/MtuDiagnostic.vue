@@ -60,20 +60,29 @@ const maxMtu = ref(1500)
 interface MtuItem { mtu: number; success: boolean; rtt_ms: number; error: string; current_best: number; fragmented: boolean }
 const results = ref<MtuItem[]>([])
 const pathMtu = ref(0)
-const sseUrl = computed(() => `/api/v1/diagnostics/mtu/stream?target=${encodeURIComponent(target.value)}&min_mtu=${minMtu.value}&max_mtu=${maxMtu.value}`)
-const { isRunning, start, stop } = useSseStream<MtuItem>(sseUrl as any)
+const sseUrl = computed(() => `/api/diagnostics/mtu/stream?target=${encodeURIComponent(target.value)}&min_mtu=${minMtu.value}&max_mtu=${maxMtu.value}`)
+const stream = useSseStream<MtuItem>(sseUrl)
+const { isRunning, stop } = stream
 
 function startDiag() {
+    const currentTarget = target.value.trim()
     results.value = []
     pathMtu.value = 0
-    const s = useSseStream<MtuItem>(sseUrl.value)
-    s.onProgress = (d) => { results.value.push(d) }
-    s.onComplete = (_d) => {
-        // 找到最大的 successful mtu
+    stream.onProgress = (d: MtuItem) => { results.value.push(d) }
+    stream.onError = (e: string) => { console.error('MTU 检测失败: ' + e) }
+    stream.onComplete = () => {
         const best = results.value.filter(r => r.success).map(r => r.mtu)
         pathMtu.value = best.length ? Math.max(...best) : 0
+        const validRtts = results.value.filter(r => r.success && r.rtt_ms > 0).map(r => r.rtt_ms)
+        const avgRtt = validRtts.length ? +(validRtts.reduce((a,b)=>a+b,0)/validRtts.length).toFixed(1) : 0
+        const saveParams = new URLSearchParams({
+            diagnostic_type: 'mtu', target: currentTarget,
+            avg_rtt: String(avgRtt), loss_percent: '0',
+            status: 'ok',
+        })
+        fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
     }
-    s.start()
+    stream.start()
 }
 </script>
 

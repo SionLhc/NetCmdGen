@@ -1,7 +1,7 @@
 <template>
   <div class="diag-home">
     <h2>🔬 网络诊断中心</h2>
-    <p class="subtitle">对企业网络链路进行诊断，当前开放 Ping 和路由追踪，其余功能开发中</p>
+    <p class="subtitle">对企业网络链路进行全面诊断，Ping / 路由追踪 / DNS / TCP端口 / HTTP / MTU / 抖动 / 历史趋势</p>
 
     <!-- 路由守卫重定向提示 -->
     <el-alert v-if="unavailableName" type="warning" :closable="true" show-icon style="margin-bottom:16px">
@@ -10,7 +10,7 @@
     </el-alert>
 
     <div class="tool-grid">
-      <!-- ✅ Ping：可用 -->
+      <!-- Ping：可用 -->
       <router-link to="/diagnostics/ping" class="tool-card">
         <div class="tc-icon">📡</div>
         <div class="tc-name">Ping 诊断</div>
@@ -18,7 +18,7 @@
         <div class="tc-status"><span class="dot ok" /> 可用</div>
       </router-link>
 
-      <!-- ✅ Traceroute：可用 -->
+      <!-- Traceroute：可用 -->
       <router-link to="/diagnostics/traceroute" class="tool-card">
         <div class="tc-icon">🗺️</div>
         <div class="tc-name">路由追踪</div>
@@ -26,53 +26,53 @@
         <div class="tc-status"><span class="dot ok" /> 可用</div>
       </router-link>
 
-      <!-- ❌ DNS：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- DNS：可用 -->
+      <router-link to="/diagnostics/dns" class="tool-card">
         <div class="tc-icon">🌐</div>
         <div class="tc-name">DNS 诊断</div>
         <div class="tc-desc">多记录类型 × 多解析器 · 8 个公共 DNS 对比 · 响应时间矩阵</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
 
-      <!-- ❌ TCP Port：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- TCP Port：可用 -->
+      <router-link to="/diagnostics/tcp-port" class="tool-card">
         <div class="tc-icon">🔌</div>
         <div class="tc-name">TCP 端口检测</div>
         <div class="tc-desc">端口连通 + 服务识别 + 风险评级 · 快捷预设（Web/全栈/远程）</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
 
-      <!-- ❌ HTTP：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- HTTP：可用 -->
+      <router-link to="/diagnostics/http" class="tool-card">
         <div class="tc-icon">🌍</div>
         <div class="tc-name">HTTP 可用性</div>
         <div class="tc-desc">状态码 / 响应时间 / SSL 证书 / 重定向链 · GET/HEAD 探测</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
 
-      <!-- ❌ MTU：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- MTU：可用 -->
+      <router-link to="/diagnostics/mtu" class="tool-card">
         <div class="tc-icon">📏</div>
         <div class="tc-name">MTU 发现</div>
         <div class="tc-desc">二分法 DF 位探测 · 递增包大小 · 可视化进度条</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
 
-      <!-- ❌ Jitter：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- Jitter：可用 -->
+      <router-link to="/diagnostics/jitter" class="tool-card">
         <div class="tc-icon">📊</div>
         <div class="tc-name">抖动分析</div>
         <div class="tc-desc">高频 Ping · RFC 3550 Jitter 计算 · ECharts 双轴对比图</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
 
-      <!-- ❌ History：不可用 -->
-      <div class="tool-card disabled" @click.prevent>
+      <!-- History：可用 -->
+      <router-link to="/diagnostics/history" class="tool-card">
         <div class="tc-icon">📈</div>
         <div class="tc-name">历史趋势</div>
         <div class="tc-desc">多目标多时段对比 · 异常事件标注 · 延迟/丢包趋势图</div>
-        <div class="tc-status"><span class="dot na" /> 不可用</div>
-      </div>
+        <div class="tc-status"><span class="dot ok" /> 可用</div>
+      </router-link>
     </div>
   </div>
 </template>

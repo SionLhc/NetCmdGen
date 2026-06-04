@@ -15,6 +15,12 @@
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleAddGroup">+ 添加分组</el-button>
         <el-button size="small" @click="handleAutoLayout">自动布局</el-button>
+        <el-button size="small" @click="exportReport">📄 导出报告</el-button>
+        <el-button size="small" type="success" @click="showLldpDialog = true">🔍 LLDP 发现</el-button>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:6px" v-if="currentTopoId" :title="collabOnline>1?`${collabOnline} 人在线`:'单人模式'">
+          <span class="collab-dot" :class="{ online: collabOnline > 1 }"></span>
+          <span style="font-size:11px;color:#909399">{{ collabOnline > 1 ? `${collabOnline} 人在线` : '' }}</span>
+        </span>
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleClear">清空</el-button>
         <el-button size="small" @click="handleDeleteSelected" :disabled="!topologyStore.selectedNode && !topologyStore.selectedEdge">删除选中</el-button>
@@ -176,6 +182,31 @@
         <el-button type="primary" @click="handleSaveEdgeLabel" size="small">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- LLDP 发现对话框 -->
+    <el-dialog v-model="showLldpDialog" title="LLDP 拓扑自动发现" width="420px">
+      <el-form label-width="80px" size="default" @submit.prevent="handleLldpDiscover">
+        <el-form-item label="种子设备">
+          <el-input v-model="lldpHost" placeholder="192.168.1.1" />
+        </el-form-item>
+        <el-form-item label="SSH 端口">
+          <el-input-number v-model="lldpPort" :min="1" :max="65535" />
+        </el-form-item>
+        <el-form-item label="用户名">
+          <el-input v-model="lldpUser" placeholder="admin" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="lldpPass" type="password" placeholder="****" />
+        </el-form-item>
+        <el-form-item label="发现深度">
+          <el-input-number v-model="lldpDepth" :min="1" :max="5" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showLldpDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleLldpDiscover" :loading="lldpLoading">开始扫描</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -186,9 +217,114 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useTopologyStore } from '@/stores/topology'
 import DevicePalette from '@/components/topology/DevicePalette.vue'
 import PropertyPanel from '@/components/topology/PropertyPanel.vue'
+import dagre from 'dagre'
 
 const topologyStore = useTopologyStore()
 const canvasRef = ref<HTMLDivElement>()
+
+// 协作状态
+const collabOnline = ref(1)
+let collabSocket: WebSocket | null = null
+
+/** 连接协作 WebSocket */
+function connectCollab(roomId: string) {
+    collabSocket?.close()
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    collabSocket = new WebSocket(`${proto}://${location.host}/api/collab/ws/${roomId}`)
+    collabSocket.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data)
+            if (msg.type === 'joined' || msg.type === 'join' || msg.type === 'leave') {
+                collabOnline.value = msg.online || 1
+            } else if (msg.type === 'update' && msg.data) {
+                // 应用远程拓扑更新
+                applyRemoteUpdate(msg.data)
+            }
+        } catch {}
+    }
+    collabSocket.onclose = () => { collabOnline.value = 1 }
+}
+
+/** 应用远程拓扑更新 */
+function applyRemoteUpdate(data: any) {
+    if (!graph) return
+    try {
+        graph.fromJSON(data)
+        graph.centerContent()
+    } catch { /* 忽略无效更新 */ }
+}
+
+// LLDP 发现状态
+const showLldpDialog = ref(false)
+const lldpHost = ref('')
+const lldpPort = ref(22)
+const lldpUser = ref('admin')
+const lldpPass = ref('')
+const lldpDepth = ref(2)
+const lldpLoading = ref(false)
+
+/** LLDP 自动发现并导入拓扑 */
+async function handleLldpDiscover() {
+    if (!lldpHost.value.trim() || !lldpUser.value.trim()) {
+        ElMessage.warning('请输入设备 IP 和用户名'); return
+    }
+    lldpLoading.value = true
+    try {
+        const params = new URLSearchParams({
+            host: lldpHost.value, port: String(lldpPort.value),
+            username: lldpUser.value, password: lldpPass.value,
+            max_depth: String(lldpDepth.value),
+        })
+        const res = await fetch('/api/lldp/discover?' + params)
+        const data = await res.json()
+        if (!data.success) {
+            ElMessage.warning(data.message || '未发现邻居')
+            return
+        }
+        // 导入到当前拓扑
+        lldpImportToGraph(data.nodes, data.edges)
+        ElMessage.success(`发现 ${data.total} 台设备，${data.edges.length} 条连线`)
+        showLldpDialog.value = false
+    } catch {
+        ElMessage.error('LLDP 发现失败')
+    } finally {
+        lldpLoading.value = false
+    }
+}
+
+/** 将 LLDP 发现的 JSON 数据导入 X6 图形 */
+function lldpImportToGraph(jsonNodes: any[], jsonEdges: any[]) {
+    if (!graph) return
+    // 添加节点
+    for (const n of jsonNodes) {
+        if (graph.getCellById(n.id)) continue
+        const data = topologyStore.getDeviceConfig(n.type || 'switch') || {}
+        graph.addNode({
+            id: n.id,
+            shape: 'topo-node',
+            x: n.x || 100, y: n.y || 100,
+            width: 120, height: 70,
+            data: { ...data, hostname: n.label, mgmtIp: n.mgmtIp, label: n.label },
+            ports: { items: [{ group: 'top' }, { group: 'bottom' }] },
+        })
+    }
+    // 添加连线
+    for (const e of jsonEdges) {
+        const existing = graph.getEdges().filter(edge =>
+            (edge.getSourceCellId() === e.source && edge.getTargetCellId() === e.target) ||
+            (edge.getSourceCellId() === e.target && edge.getTargetCellId() === e.source)
+        )
+        if (existing.length > 0) continue
+        graph.addEdge({
+            shape: 'edge',
+            source: { cell: e.source, port: 'bottom' },
+            target: { cell: e.target, port: 'top' },
+            labels: e.sourcePort ? [{ attrs: { label: { text: `${e.sourcePort}↔${e.targetPort}` } } }] : [],
+            attrs: { line: { stroke: '#94a3b8', strokeWidth: 2, targetMarker: null } },
+        })
+    }
+    graph.centerContent()
+}
 
 // ─── 多拓扑管理（服务器文件存储）─────────────────────
 import { getTopoList, createTopo, getTopoData, saveTopoData, renameTopo, deleteTopo, importTopo, type TopoItem } from '@/api'
@@ -241,6 +377,7 @@ async function switchTopo(id: string) {
 
 async function loadCurrentTopo() {
   if (!graph || !currentTopoId.value) return
+  connectCollab(currentTopoId.value)  // 拓扑加载时连接协作房间
   try {
     const { data } = await getTopoData(currentTopoId.value)
     if (data && data.cells && data.cells.length > 0) {
@@ -610,6 +747,17 @@ function initGraph() {
       // 排除临时/导航节点变化
       beforeAddCommand(event, args) { return true },
     },
+  })
+
+  // 协作：拓扑变更时广播给同房间其他客户端
+  graph.on('cell:change:*', () => {
+    if (collabSocket?.readyState === WebSocket.OPEN && currentTopoId.value) {
+      collabSocket.send(JSON.stringify({
+        type: 'update',
+        room_id: currentTopoId.value,
+        data: graph.toJSON(),
+      }))
+    }
   })
 
   // ─── 快捷键：Ctrl+Z 撤销 / Ctrl+Y 重做 ──────────────
@@ -1017,75 +1165,80 @@ function handleExportToWorkbench() {
     ElMessage.success(`已导出 ${devices.length} 台设备 + ${topologyStore.exportedEdges.length} 条连线`)
 }
 
-/** 自动布局：核心-汇聚-接入三层从上到下排列 */
+/** 导出拓扑文档报告 */
+async function exportReport() {
+    if (!graph) return
+    const data = saveGraphData()
+    try {
+        const res = await fetch('/api/report/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        })
+        if (!res.ok) throw new Error()
+        const blob = await res.blob()
+        const link = document.createElement('a')
+        link.href = URL.createObjectURL(blob)
+        link.download = 'topology-report.md'
+        link.click()
+        ElMessage.success('报告已导出')
+    } catch {
+        ElMessage.error('报告生成失败')
+    }
+}
+
+/** 自动布局：基于 dagre 算法，根据连线关系自动排列 */
 function handleAutoLayout() {
     if (!graph) return
 
-    const nodes = graph.getNodes()
+    const nodes = graph.getNodes().filter(n => n.shape !== 'group-node')
+    const edges = graph.getEdges()
+
     if (nodes.length < 2) {
         ElMessage.warning('至少需要 2 个节点才能自动布局')
         return
     }
 
-    // 按角色分组
-    const layers: Record<string, any[]> = {
-        core: [],
-        agg: [],
-        access: [],
-        other: [],
-    }
+    // 创建 dagre 图谱
+    const g = new dagre.graphlib.Graph()
+    g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 120, marginx: 60, marginy: 60 })
+    g.setDefaultEdgeLabel(() => ({}))
 
+    // 添加节点（设置默认尺寸）
+    const NODE_W = 140, NODE_H = 80
     for (const node of nodes) {
-        // 跳过分组节点
-        if (node.shape === 'group-node') continue
-
-        const data = node.getData() || {}
-        const role = data.role || data.type || ''
-        if (role.includes('core')) layers.core.push(node)
-        else if (role.includes('agg')) layers.agg.push(node)
-        else if (role.includes('access')) layers.access.push(node)
-        else layers.other.push(node)
+        const size = node.getSize()
+        g.setNode(node.id, { width: size.width || NODE_W, height: size.height || NODE_H })
     }
 
-    const startX = 100
-    const layerGap = 180
-    const nodeGap = 120
+    // 添加边
+    for (const edge of edges) {
+        const source = edge.getSourceCellId()
+        const target = edge.getTargetCellId()
+        if (source && target) g.setEdge(source, target)
+    }
 
-    function layoutLayer(layerNodes: any[], y: number) {
-        const totalWidth = (layerNodes.length - 1) * nodeGap
-        const startAtX = startX + (600 - totalWidth) / 2
-        for (let i = 0; i < layerNodes.length; i++) {
-            layerNodes[i].setPosition({ x: startAtX + i * nodeGap, y })
+    // 运行 dagre 布局
+    dagre.layout(g)
+
+    // 应用位置到 X6 节点（带过渡动画）
+    graph.startBatch('auto-layout')
+    for (const node of nodes) {
+        const pos = g.node(node.id)
+        if (pos) {
+            const targetX = pos.x - pos.width / 2
+            const targetY = pos.y - pos.height / 2
+            // 使用 transition 实现平滑移动
+            node.transition('position', { x: targetX, y: targetY }, {
+                duration: 400,
+                easing: 'easeOutCubic',
+                interp: (a: number, b: number) => (t: number) => a + (b - a) * t,
+            })
         }
     }
 
-    let currentY = 80
-
-    // 核心层在顶部
-    if (layers.core.length > 0) {
-        layoutLayer(layers.core, currentY)
-        currentY += layerGap
-    }
-
-    // 汇聚层
-    if (layers.agg.length > 0) {
-        layoutLayer(layers.agg, currentY)
-        currentY += layerGap
-    }
-
-    // 接入层
-    if (layers.access.length > 0) {
-        layoutLayer(layers.access, currentY)
-        currentY += layerGap
-    }
-
-    // 其他设备
-    if (layers.other.length > 0) {
-        layoutLayer(layers.other, currentY)
-    }
-
-    // 自动调整分组容器大小以包含子节点
-    for (const node of nodes) {
+    // 自动调整分组容器大小
+    for (const node of graph.getNodes()) {
         if (node.shape !== 'group-node') continue
         const children = node.getChildren() || []
         if (children.length === 0) continue
@@ -1103,7 +1256,10 @@ function handleAutoLayout() {
         node.setPosition({ x: minX - padding, y: minY - padding - 20 })
         node.setSize({ width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 + 20 })
     }
+    graph.stopBatch('auto-layout')
 
+    // 居中显示（带缩放过渡）
+    setTimeout(() => graph.centerContent({ padding: 40, useTransition: true }), 450)
     ElMessage.success('自动布局完成')
 }
 
@@ -1336,4 +1492,6 @@ async function handleExportPng() {
   font-size: 18px;
   color: #909399;
 }
+.collab-dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; transition: background .3s; }
+.collab-dot.online { background: #10b981; box-shadow: 0 0 4px rgba(16,185,129,.4); }
 </style>

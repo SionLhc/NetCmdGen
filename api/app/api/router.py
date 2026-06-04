@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from app.api import generate, manual, network_tools, tools_extra, tools_subnet, topology
+from app.api import collaboration, config_audit, lldp_discovery, report, ssh_terminal
 from app.api.diagnostics import dns as diag_dns
 from app.api.diagnostics import tcp_port as diag_tcp
 from app.api.diagnostics import http_check as diag_http
@@ -25,4 +26,9 @@ api_router.include_router(diag_history.router, prefix="/diagnostics", tags=["dia
 
 api_router.include_router(generate.router, tags=["generate"])
 api_router.include_router(manual.router, tags=["manual"])
+api_router.include_router(collaboration.router, tags=["collab"])
+api_router.include_router(config_audit.router, tags=["audit"])
+api_router.include_router(lldp_discovery.router, tags=["lldp"])
+api_router.include_router(report.router, tags=["report"])
+api_router.include_router(ssh_terminal.router, prefix="/ssh", tags=["ssh"])
 api_router.include_router(topology.router, tags=["topology"])

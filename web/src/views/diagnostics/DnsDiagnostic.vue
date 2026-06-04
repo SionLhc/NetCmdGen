@@ -67,6 +67,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useSseStream } from '@/composables/useSseStream'
 
 const target = ref('baidu.com')
@@ -76,21 +77,34 @@ const allTypes = ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'TXT', 'SOA', 'SRV']
 
 interface DnsItem { record_type: string; server: string; server_name: string; records: string[]; rtt_ms: number; error: string }
 const results = ref<DnsItem[]>([])
-const { isRunning, progress, total, start, stop } = useSseStream<DnsItem>(
-    computed(() => `/api/v1/diagnostics/dns/stream?target=${target.value}&record_types=${recordTypes.value.join(',')}&dns_servers=${dnsServers.value.join(',')}`) as any
-)
 
-const pct = computed(() => total.value ? Math.round(progress.value / total.value * 100) : 0)
+const sseUrl = computed(() =>
+    `/api/diagnostics/dns/stream?target=${encodeURIComponent(target.value)}&record_types=${recordTypes.value.join(',')}&dns_servers=${dnsServers.value.join(',')}`
+)
+const stream = useSseStream<DnsItem>(sseUrl)
+
+const isRunning = stream.isRunning
+const pct = computed(() => stream.total.value ? Math.round(stream.progress.value / stream.total.value * 100) : 0)
 
 function startDiag() {
+    const currentTarget = target.value.trim()
     results.value = []
-    const url = `/api/v1/diagnostics/dns/stream?target=${encodeURIComponent(target.value)}&record_types=${recordTypes.value.join(',')}&dns_servers=${dnsServers.value.join(',')}`
-    const s = useSseStream<DnsItem>(url)
-    s.onProgress = (d) => { results.value.push(d) }
-    s.onComplete = (_) => {}
-    s.onError = (e) => {}
-    s.start()
+    stream.onProgress = (d: DnsItem) => { results.value.push(d) }
+    stream.onError = (e: string) => { ElMessage.error('DNS 查询失败: ' + e) }
+    stream.onComplete = () => {
+        // 保存历史：计算平均 RTT
+        const validRtts = results.value.filter(r => r.rtt_ms > 0).map(r => r.rtt_ms)
+        const avgRtt = validRtts.length ? +(validRtts.reduce((a,b)=>a+b,0)/validRtts.length).toFixed(1) : 0
+        const saveParams = new URLSearchParams({
+            diagnostic_type: 'dns', target: currentTarget,
+            avg_rtt: String(avgRtt), loss_percent: '0',
+            status: 'ok',
+        })
+        fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
+    }
+    stream.start()
 }
+function stop() { stream.stop() }
 </script>
 
 <style scoped>

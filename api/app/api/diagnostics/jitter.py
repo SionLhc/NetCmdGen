@@ -14,7 +14,7 @@ import time
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Query
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/jitter", tags=["diagnostics-jitter"])
 
@@ -49,7 +49,8 @@ async def _jitter_calc_async(host: str, packet_count: int = 100, interval_ms: fl
     total_sent = 0
 
     for seq in range(seq_offset, seq_offset + packet_count):
-        r = _high_freq_ping(host)
+        # 用线程池执行同步 ping，避免阻塞事件循环
+        r = await asyncio.to_thread(_high_freq_ping, host)
         total_sent += 1
 
         if r["lost"]:
@@ -89,14 +90,24 @@ async def jitter_analysis_stream(
     """高频 Ping 计算网络抖动 + 统计信息"""
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        import json as _json
         async for pt in _jitter_calc_async(target, packet_count, interval_ms):
-            yield f"""event: progress
-data: {{"type":"progress","data":{{"seq":{pt["seq"]},"rtt_ms":{pt["rtt_ms"]},"jitter_ms":{pt["jitter_ms"]},"lost":{str(pt["lost"]).lower()},"loss_count":{pt["loss_count"]},"avg_rtt":{pt["avg_rtt"]}}},"progress":{pt["seq"]},"total":{packet_count}}}
+            payload = _json.dumps({
+                "type": "progress",
+                "data": {
+                    "seq": pt["seq"], "rtt_ms": pt["rtt_ms"],
+                    "jitter_ms": pt["jitter_ms"], "lost": pt["lost"],
+                    "loss_count": pt["loss_count"], "avg_rtt": pt["avg_rtt"],
+                },
+                "progress": pt["seq"],
+                "total": packet_count,
+            }, ensure_ascii=False)
+            yield f"data: {payload}\n\n"
 
-"""
-        yield f"""event: complete
-data: {{"type":"complete","status":"done","packet_count":{packet_count},"target":"{target}"}}
+        payload = _json.dumps({
+            "type": "complete", "status": "done",
+            "packet_count": packet_count, "target": target,
+        }, ensure_ascii=False)
+        yield f"data: {payload}\n\n"
 
-"""
-
-    return EventSourceResponse(event_generator())
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

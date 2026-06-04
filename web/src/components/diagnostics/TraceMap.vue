@@ -65,10 +65,10 @@
       </div>
     </div>
 
-    <!-- 逐跳拓扑可视化 -->
-    <div v-if="hops.length > 0" class="trace-body">
+    <!-- 逐跳拓扑可视化：图表容器始终存在，防止 v-if 导致 Grid 布局延时 -->
+    <div class="trace-body">
       <!-- 节点路径视图 -->
-      <div class="hop-path">
+      <div class="hop-path" v-show="hops.length > 0">
         <div
           v-for="(hop, idx) in hops"
           :key="hop.hop"
@@ -84,40 +84,44 @@
           <div
             class="hop-node"
             :class="{
+              'node-ttl': hop.avg_rtt == null && hop.ip !== '超时',
               'node-timeout': hop.ip === '超时',
               'node-reached': hop.reached,
               'node-latest': idx === hops.length - 1 && isRunning,
             }"
           >
             <div class="node-circle">
-              <span v-if="hop.ip !== '超时'" class="node-number">{{ hop.hop }}</span>
-              <span v-else class="node-x">✕</span>
+              <!-- 到达目标 → 绿色对勾 -->
+              <svg v-if="hop.reached" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="node-check"><polyline points="20 6 9 17 4 12"/></svg>
+              <!-- TTL 过期但有 IP → 蓝色箭头 -->
+              <span v-else-if="hop.avg_rtt == null && hop.ip !== '超时'" class="node-number" style="font-size:11px">→</span>
+              <!-- 完全超时 → 红色 X -->
+              <span v-else-if="hop.ip === '超时'" class="node-x">✕</span>
+              <!-- 正常有 RTT → 跳数 -->
+              <span v-else class="node-number">{{ hop.hop }}</span>
             </div>
             <div class="node-info">
-              <div class="node-ip" :style="{ color: hop.ip === '超时' ? '#ef4444' : hop.reached ? '#10b981' : '#475569' }">
+              <div class="node-ip" :style="{
+                color: hop.reached ? '#10b981' : hop.ip === '超时' ? '#ef4444' : '#475569',
+                fontWeight: hop.reached ? 700 : hop.ip === '超时' ? 400 : 600,
+              }">
                 {{ hop.ip }}
               </div>
               <div class="node-meta">
+                <!-- 有延迟 → 显示 ms -->
                 <span v-if="hop.avg_rtt != null" class="meta-rtt" :class="{
                   'rtt-fast': hop.avg_rtt < 10,
                   'rtt-normal': hop.avg_rtt >= 10 && hop.avg_rtt < 50,
                   'rtt-slow': hop.avg_rtt >= 50
                 }">{{ hop.avg_rtt }}ms</span>
-                <span v-if="hop.loss > 0" class="meta-loss">{{ hop.loss }}/{{ hop.rtts.length }} 丢</span>
-              </div>
-              <!-- 单次 RTT 详情 -->
-              <div class="node-detail" v-if="hop.rtts?.length">
-                <span
-                  v-for="(r, ri) in hop.rtts"
-                  :key="ri"
-                  class="detail-dot"
-                  :class="{ 'dot-ok': r !== null, 'dot-lost': r === null }"
-                  :title="r !== null ? r + 'ms' : '超时'"
-                ></span>
+                <!-- TTL 过期有 IP → 显示"转发"（成功收到路由器回复只是无延迟） -->
+                <span v-else-if="hop.ip !== '超时'" class="meta-fwd">转发</span>
+                <!-- 完全超时 -->
+                <span v-else class="meta-loss">超时</span>
               </div>
             </div>
             <!-- 到达标记 -->
-            <div v-if="hop.reached" class="node-badge">🏁</div>
+            <div v-if="hop.reached" class="node-badge">到达</div>
           </div>
         </div>
 
@@ -129,8 +133,17 @@
         </div>
       </div>
 
-      <!-- 侧边栏：ECharts 延迟柱状图 -->
-      <div class="trace-chart-panel">
+      <!-- 空状态覆盖（grid 中跨两列） -->
+      <div v-if="hops.length === 0 && !isRunning" class="empty-state" style="grid-column:1/-1">
+        <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="5" cy="19" r="2"/>
+          <line x1="12" y1="7" x2="7" y2="16"/><line x1="12" y1="7" x2="17" y2="16"/>
+        </svg>
+        <p>输入目标地址，点击"开始追踪"查看数据包经过的路由节点</p>
+      </div>
+
+      <!-- 侧边栏：ECharts 延迟柱状图，容器始终在 DOM 确保布局正确 -->
+      <div class="trace-chart-panel" v-show="hops.length > 0">
         <div class="chart-header">
           <span>逐跳延迟对比 (ms)</span>
         </div>
@@ -138,8 +151,8 @@
       </div>
     </div>
 
-    <!-- 空状态 -->
-    <div v-else-if="!isRunning" class="empty-state">
+    <!-- 旧空状态（保留兼容） -->
+    <div v-if="false" class="empty-state">
       <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="12" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="5" cy="19" r="2"/>
         <line x1="12" y1="7" x2="7" y2="16"/><line x1="12" y1="7" x2="17" y2="16"/>
@@ -192,6 +205,7 @@ function startTrace() {
     ElMessage.warning('请输入目标地址')
     return
   }
+  const currentTarget = target.value.trim()  // 闭包捕获，防止回调时值被修改
   hops.value = []
   isRunning.value = true
 
@@ -202,10 +216,20 @@ function startTrace() {
       hops.value = [...data.hops]
       nextTick(() => updateChart())
     },
-    // onDone — 全部完成
+    // onDone — 全部完成 + 保存历史
     (data) => {
       hops.value = [...data.hops]
       isRunning.value = false
+      // 保存历史：取最后一跳的 avg_rtt（使用捕获的目标值）
+      const lastHop = data.hops?.[data.hops.length - 1]
+      const saveParams = new URLSearchParams({
+        diagnostic_type: 'traceroute',
+        target: currentTarget,
+        avg_rtt: String(lastHop?.avg_rtt ?? 0),
+        loss_percent: String(lastHop?.loss ?? 0),
+        status: reachedTarget.value ? 'ok' : 'error',
+      })
+      fetch('/api/diagnostics/history/save?' + saveParams, { method: 'GET' }).catch(() => {})
       nextTick(() => updateChart())
       if (reachedTarget.value) {
         ElMessage.success(`路由追踪完成: ${data.total_hops} 跳到达目标`)
@@ -236,9 +260,13 @@ function updateChart() {
   if (!traceChart) {
     traceChart = echarts.init(traceChartRef.value!)
   }
+  renderTraceChart()
+}
 
-  const hopLabels = hops.value.map(h => `#${h.hop}`)
-  const avgRtts = hops.value.map(h => h.avg_rtt ?? null)
+/** 将 hops 数据渲染到 ECharts 柱状图，所有跳都有柱子 */
+function renderTraceChart() {
+  if (!traceChart) return
+  const hopNums = hops.value.map(h => `#${h.hop}`)
   const ips = hops.value.map(h => h.ip)
 
   traceChart.setOption({
@@ -249,16 +277,23 @@ function updateChart() {
       textStyle: { color: '#e2e8f0', fontSize: 12 },
       formatter: (params: any) => {
         const p = params[0]
-        const ip = ips[p.dataIndex]
-        const val = p.data != null ? `${p.data}ms` : '超时'
-        return `<b>${p.axisValue}</b> ${ip}<br/>平均延迟: ${val}`
+        const idx = p.dataIndex
+        const hop = hops.value[idx]
+        const val = hop.avg_rtt
+        const ip = ips[idx]
+        if (val == null) {
+          return `<b>#${hop.hop} ${ip}</b><br/>延迟: — (无响应)`
+        }
+        return `<b>#${hop.hop} ${ip}</b><br/>延迟: ${val}ms`
       }
     },
-    grid: { top: 10, right: 12, bottom: 24, left: 40 },
+    grid: { top: 16, right: 18, bottom: 36, left: 44 },
     xAxis: {
       type: 'category',
-      data: hopLabels,
-      axisLabel: { color: '#94a3b8', fontSize: 10 },
+      data: hopNums,
+      axisLabel: {
+        color: '#64748b', fontSize: 10,
+      },
       axisLine: { lineStyle: { color: '#e2e8f0' } },
     },
     yAxis: {
@@ -270,24 +305,31 @@ function updateChart() {
     },
     series: [{
       type: 'bar',
-      data: avgRtts.map((val, i) => ({
-        value: val ?? 0,
-        itemStyle: {
-          color: val == null ? '#fca5a5'
-            : hops.value[i]?.reached ? '#10b981'
-            : val < 10 ? '#6366f1'
-            : val < 50 ? '#f59e0b'
-            : '#ef4444',
-          borderRadius: [4, 4, 0, 0],
-        },
-      })),
       barWidth: '50%',
+      data: hops.value.map((h) => {
+        const val = h.avg_rtt
+        const hasRtt = val != null
+        return {
+          // 有延迟 → 实际值，无延迟 → 固定小高度占位
+          value: val ?? 3,
+          itemStyle: {
+            // 有延迟 → 按数值着色，无延迟 → 灰色实心
+            color: hasRtt
+              ? (h.reached ? '#10b981' : val! < 10 ? '#6366f1' : val! < 50 ? '#f59e0b' : '#ef4444')
+              : '#cbd5e1',
+            borderRadius: [3, 3, 0, 0],
+          },
+        }
+      }),
       label: {
         show: true,
         position: 'top',
         fontSize: 10,
-        color: '#64748b',
-        formatter: (p: any) => p.data.value > 0 ? p.data.value + 'ms' : '',
+        color: '#1e293b',
+        formatter: (p: any) => {
+          const val = hops.value[p.dataIndex]?.avg_rtt
+          return val != null ? val + 'ms' : '—'
+        },
       },
     }],
   }, true)
@@ -383,6 +425,7 @@ onUnmounted(() => {
   background: #fafbfc; border: 1px solid #f1f5f9;
   transition: all 0.3s ease;
 }
+.hop-node.node-ttl { background: #eff6ff; border-color: #bfdbfe; }
 .hop-node.node-timeout { background: #fef2f2; border-color: #fecaca; }
 .hop-node.node-reached { background: #f0fdf4; border-color: #bbf7d0; }
 .hop-node.node-latest { border-color: #a5b4fc; box-shadow: 0 0 0 2px rgba(99,102,241,0.1); }
@@ -394,10 +437,12 @@ onUnmounted(() => {
   flex-shrink: 0;
   transition: transform 0.3s;
 }
+.node-ttl .node-circle { background: linear-gradient(135deg, #3b82f6, #2563eb); }
 .node-timeout .node-circle { background: linear-gradient(135deg, #ef4444, #dc2626); }
 .node-reached .node-circle { background: linear-gradient(135deg, #10b981, #059669); }
 .node-number { color: #fff; font-size: 13px; font-weight: 700; }
 .node-x { color: #fff; font-size: 14px; font-weight: 700; }
+.node-check { width: 16px; height: 16px; color: #fff; }
 
 .node-info { flex: 1; min-width: 0; }
 .node-ip { font-size: 14px; font-weight: 600; font-family: monospace; }
@@ -407,11 +452,12 @@ onUnmounted(() => {
 .rtt-normal { color: #f59e0b; }
 .rtt-slow { color: #ef4444; }
 .meta-loss { font-size: 11px; color: #ef4444; }
+.meta-fwd { font-size: 11px; color: #3b82f6; }
 .node-detail { display: flex; gap: 3px; margin-top: 3px; }
 .detail-dot { width: 5px; height: 5px; border-radius: 50%; }
 .detail-dot.dot-ok { background: #6366f1; }
 .detail-dot.dot-lost { background: #fca5a5; }
-.node-badge { font-size: 16px; margin-left: auto; }
+.node-badge { font-size: 11px; font-weight: 600; color: #10b981; margin-left: auto; padding: 2px 8px; background: rgba(16,185,129,0.1); border-radius: 4px; }
 
 /* 加载动画 */
 .hop-loading {

@@ -60,7 +60,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, watch, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{ modelValue: Record<string, any> }>()
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, any>] }>()
@@ -86,9 +87,39 @@ function removeIface(idx: number) { interfaces.splice(idx, 1); emitUpdate() }
 function addVlanif() { vlanifs.push({ vlan_id: 1, ip_address: '', mask: '255.255.255.0' }) }
 function removeVlanif(idx: number) { vlanifs.splice(idx, 1); emitUpdate() }
 
+// 检测重复 VLAN ID
+const vlanConflicts = computed(() => {
+    const seen = new Map<number, number[]>()
+    vlans.forEach((v, i) => {
+        if (v.id !== 1) {  // VLAN 1 另作警告
+            const arr = seen.get(v.id) || []
+            arr.push(i)
+            seen.set(v.id, arr)
+        }
+    })
+    return Array.from(seen.entries()).filter(([, idxs]) => idxs.length > 1).map(([id]) => id)
+})
+
 function emitUpdate() {
+    // 校验 VLAN ID 重复
+    if (vlanConflicts.value.length > 0) {
+        ElMessage.warning(`VLAN ID ${vlanConflicts.value.join(', ')} 重复，请检查`)
+    }
+    // VLAN 1 提醒
+    const hasVlan1 = vlans.some(v => v.id === 1)
+    if (hasVlan1) {
+        ElMessage.warning('VLAN 1 为默认 VLAN，建议分配业务 VLAN（2-4094）')
+    }
+    // IP 格式校验
+    const ipPattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
+    for (const vf of vlanifs) {
+        if (vf.ip_address && !ipPattern.test(vf.ip_address)) {
+            ElMessage.error(`VLANIF-${vf.vlan_id} IP 格式错误: ${vf.ip_address}`)
+            return
+        }
+    }
+
     const params: Record<string, any> = {}
-    // 华为用扁平结构，其他厂商用结构化结构
     params.vlans = [...vlans]
     params.interfaces = [...interfaces]
     if (vlanifs.length > 0) params.vlanifs = [...vlanifs]
