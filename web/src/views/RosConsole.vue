@@ -13,28 +13,29 @@
       </div>
     </header>
 
-    <!-- 设备栏 -->
+    <!-- 设备栏 + 接口多选 -->
     <div class="dev-bar">
-      <div v-for="d in devices" :key="d.id" class="dev-chip" :class="{active: activeDev===d.id}" @click="activeDev=d.id">
+      <div v-for="d in devices" :key="d.id" class="dev-chip" :class="{active: activeDev===d.id}" @click="onDevClick(d)">
         <span class="dev-dot"></span>
         <span>{{ d.name || d.host }}</span>
-        <el-popover placement="bottom" :width="220" trigger="click">
-          <template #reference>
-            <span class="dev-arrow" @click.stop>▾</span>
-          </template>
-          <div v-if="devIfaces[d.id]?.length" style="max-height:200px;overflow-y:auto">
-            <div v-for="f in devIfaces[d.id]" :key="f.index" class="iface-row"
-              :class="{checked: isStreamActive(d.id, f.index)}"
-              @click="toggleStream(d, f)">
-              <span class="iface-dot" :class="{on: isStreamActive(d.id, f.index)}"></span>
-              <span>{{ f.name }}</span>
-              <span style="margin-left:auto;font-size:10px;color:#666">{{ f.speed_label }}</span>
-            </div>
-          </div>
-          <div v-else style="color:#999;font-size:11px;padding:8px 0;text-align:center">点击设备切换到该设备</div>
-        </el-popover>
       </div>
       <div v-if="!devices.length" class="dev-empty">No devices — click + Add Device</div>
+    </div>
+
+    <!-- 接口选择条（当前设备） -->
+    <div class="iface-strip" v-if="activeDev && devIfaces[activeDev]?.length">
+      <span style="font-size:11px;color:rgba(255,255,255,.3);margin-right:8px">Interfaces:</span>
+      <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
+        :class="{on: isStreamActive(activeDev, f.index)}"
+        @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
+        {{ f.name }}
+      </div>
+      <span v-if="devIfaces[activeDev]?.length" style="font-size:10px;color:rgba(255,255,255,.15);margin-left:8px">
+        点击切换监控
+      </span>
+    </div>
+    <div class="iface-strip" v-else-if="activeDev" style="color:rgba(255,255,255,.2);font-size:11px;padding:6px 24px">
+      Loading interfaces...
     </div>
 
     <!-- 速率概览卡片 -->
@@ -124,13 +125,23 @@ async function saveDev() {
 watch(activeDev, async (id) => {
   if (!id) return
   if (devIfaces.value[id]) return
+  await fetchIfaces(id)
+})
+
+async function fetchIfaces(id: string) {
   const d = devices.value.find(x => x.id === id)
   if (!d) return
   try {
     const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`)
     devIfaces.value[id] = await r.json()
   } catch { devIfaces.value[id] = [] }
-})
+}
+
+async function onDevClick(d: Dev) {
+  activeDev.value = d.id
+  // 主动加载接口
+  if (!devIfaces.value[d.id]) await fetchIfaces(d.id)
+}
 
 /* ── 多流管理 ── */
 interface Stream {
@@ -216,7 +227,7 @@ function stopAll() {
 function renderChart() {
   if (!chartRef.value) return
   if (!chart) {
-    chart = echarts.init(chartRef.value, 'dark')
+    chart = echarts.init(chartRef.value)
     window.addEventListener('resize', () => chart?.resize())
   }
 
@@ -256,7 +267,8 @@ function renderChart() {
     grid: { top: 16, right: 20, bottom: 40, left: 55 },
     xAxis: {
       type: 'category', data: labels, boundaryGap: false,
-      axisLabel: { fontSize: 10, color: '#556' },
+      axisLabel: { fontSize: 10, color: '#667788' },
+      axisLine: { lineStyle: { color: '#334' } },
       splitLine: { show: false },
     },
     yAxis: {
