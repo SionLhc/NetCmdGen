@@ -12,7 +12,7 @@ from fastapi import APIRouter, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from pysnmp.hlapi.asyncio import (
     SnmpEngine, CommunityData, UdpTransportTarget, ContextData,
-    ObjectType, ObjectIdentity, getCmd,
+    ObjectType, ObjectIdentity, get_cmd, next_cmd,
 )
 
 router = APIRouter(prefix="/ros/traffic", tags=["ros-traffic"])
@@ -27,7 +27,7 @@ IF_SPEED = "1.3.6.1.2.1.2.2.1.5"           # ifSpeed
 async def _snmp_get(host: str, community: str, oid: str,
                     port: int = 161) -> str:
     """SNMP GET 单个 OID"""
-    iterator = getCmd(
+    iterator = get_cmd(
         SnmpEngine(),
         CommunityData(community, mpModel=1),
         await UdpTransportTarget.create((host, port), timeout=2, retries=1),
@@ -47,9 +47,9 @@ async def _snmp_get(host: str, community: str, oid: str,
 async def _snmp_walk(host: str, community: str, base_oid: str,
                      port: int = 161) -> dict[int, str]:
     """SNMP WALK 获取某 OID 下所有接口的值，返回 {ifIndex: value}"""
-    from pysnmp.hlapi.asyncio import nextCmd
+    
     result = {}
-    iterator = nextCmd(
+    iterator = next_cmd(
         SnmpEngine(),
         CommunityData(community, mpModel=1),
         await UdpTransportTarget.create((host, port), timeout=3, retries=1),
