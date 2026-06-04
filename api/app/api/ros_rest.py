@@ -12,9 +12,9 @@ from typing import Any, AsyncGenerator, Optional
 
 import httpx
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import StreamingResponse
 
 from app.api.ros_models import RosCredentials
+
 
 router = APIRouter(prefix="/ros", tags=["ros"])
 
@@ -225,15 +225,59 @@ def get_system(device_id: str = Query(...)):
     ))
 
 
-@router.get("/interfaces", summary="获取接口列表")
-def get_interfaces(device_id: str = Query(...)):
+def _get_device_creds(device_id: str):
+    """获取设备凭证的辅助函数"""
     conn = _get_db()
     r = conn.execute("SELECT * FROM devices WHERE id=?", (device_id,)).fetchone()
     conn.close()
     if not r:
         raise HTTPException(404, "设备不存在")
-    password = _decrypt(r["password_enc"]) if r["password_enc"] else ""
-    return asyncio.run(_ros_request(
-        r["host"], r["port"], r["username"], password,
-        "interface", use_ssl=bool(r["use_ssl"])
-    ))
+    return {
+        "host": r["host"], "port": r["port"], "username": r["username"],
+        "password": _decrypt(r["password_enc"]) if r["password_enc"] else "",
+        "use_ssl": bool(r["use_ssl"]),
+    }
+
+
+# ─── 通用 REST CRUD 代理（支持任意 RouterOS 菜单路径）───
+
+@router.get("/proxy", summary="通用 REST 查询")
+def proxy_get(device_id: str = Query(...), path: str = Query(..., description="菜单路径，如 ip/address")):
+    creds = _get_device_creds(device_id)
+    return asyncio.run(_ros_request(creds["host"], creds["port"], creds["username"],
+                                     creds["password"], path, use_ssl=creds["use_ssl"]))
+
+
+@router.patch("/proxy", summary="通用 REST 更新")
+async def proxy_patch(device_id: str = Query(...), path: str = Query(...), data: str = Query(default="{}")):
+    creds = _get_device_creds(device_id)
+    import json
+    return await _ros_request(creds["host"], creds["port"], creds["username"],
+                               creds["password"], path, method="PATCH",
+                               data=json.loads(data), use_ssl=creds["use_ssl"])
+
+
+@router.put("/proxy", summary="通用 REST 创建")
+async def proxy_put(device_id: str = Query(...), path: str = Query(...), data: str = Query(default="{}")):
+    creds = _get_device_creds(device_id)
+    import json
+    return await _ros_request(creds["host"], creds["port"], creds["username"],
+                               creds["password"], path, method="PUT",
+                               data=json.loads(data), use_ssl=creds["use_ssl"])
+
+
+@router.delete("/proxy", summary="通用 REST 删除")
+async def proxy_delete(device_id: str = Query(...), path: str = Query(...)):
+    creds = _get_device_creds(device_id)
+    return await _ros_request(creds["host"], creds["port"], creds["username"],
+                               creds["password"], path, method="DELETE",
+                               use_ssl=creds["use_ssl"])
+
+
+# ─── 已有端点（保留兼容）───
+
+@router.get("/interfaces", summary="获取接口列表")
+def get_interfaces(device_id: str = Query(...)):
+    creds = _get_device_creds(device_id)
+    return asyncio.run(_ros_request(creds["host"], creds["port"], creds["username"],
+                                     creds["password"], "interface", use_ssl=creds["use_ssl"]))
