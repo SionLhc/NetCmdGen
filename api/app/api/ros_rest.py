@@ -1,0 +1,223 @@
+"""RouterOS REST API 代理 — Phase 1 核心模块"""
+from __future__ import annotations
+
+import asyncio
+import base64
+import hashlib
+import json
+import sqlite3
+import time
+from pathlib import Path
+from typing import Any, AsyncGenerator, Optional
+
+import httpx
+from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import StreamingResponse
+
+from app.api.ros_models import RosCredentials
+
+router = APIRouter(prefix="/ros", tags=["ros"])
+
+# ─── 凭证存储 (SQLite) ───
+DB_DIR = Path(__file__).parent.parent / "data"
+DB_PATH = DB_DIR / "ros_devices.db"
+ENCRYPT_KEY = "netcmdgen-ros-2024"  # 生产环境应使用环境变量
+
+
+def _get_db() -> sqlite3.Connection:
+    DB_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS devices (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            host TEXT NOT NULL,
+            port INTEGER DEFAULT 443,
+            username TEXT DEFAULT 'admin',
+            password_enc TEXT DEFAULT '',
+            use_ssl INTEGER DEFAULT 1,
+            grp TEXT DEFAULT 'default',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def _encrypt(text: str) -> str:
+    """简单 XOR 加密（生产应使用 AES）"""
+    key = ENCRYPT_KEY.encode()
+    data = text.encode()
+    result = bytearray()
+    for i, b in enumerate(data):
+        result.append(b ^ key[i % len(key)])
+    return base64.urlsafe_b64encode(bytes(result)).decode()
+
+
+def _decrypt(encrypted: str) -> str:
+    try:
+        data = base64.urlsafe_b64decode(encrypted)
+        key = ENCRYPT_KEY.encode()
+        result = bytearray()
+        for i, b in enumerate(data):
+            result.append(b ^ key[i % len(key)])
+        return result.decode()
+    except Exception:
+        return ""
+
+
+# ─── REST 客户端 ───
+async def _ros_request(host: str, port: int, username: str, password: str,
+                        path: str, method: str = "GET", data: dict = None,
+                        use_ssl: bool = True, timeout: float = 10.0) -> dict:
+    """向 RouterOS REST API 发送请求"""
+    proto = "https" if use_ssl else "http"
+    url = f"{proto}://{host}:{port}/rest/{path}"
+    auth = (username, password) if username and password else None
+
+    async with httpx.AsyncClient(verify=False, timeout=timeout) as client:
+        if method == "GET":
+            resp = await client.get(url, auth=auth)
+        elif method == "PATCH":
+            resp = await client.patch(url, json=data, auth=auth)
+        elif method == "PUT":
+            resp = await client.put(url, json=data, auth=auth)
+        elif method == "DELETE":
+            resp = await client.delete(url, auth=auth)
+        elif method == "POST":
+            resp = await client.post(url, json=data, auth=auth)
+        else:
+            resp = await client.get(url, auth=auth)
+
+        if resp.status_code >= 400:
+            raise HTTPException(resp.status_code, f"RouterOS 返回错误: {resp.text[:200]}")
+        try:
+            return resp.json() if resp.text else {}
+        except Exception:
+            return {"raw": resp.text}
+
+
+async def _quick_test(host: str, port: int, username: str, password: str,
+                      use_ssl: bool = True) -> dict:
+    """快速连接测试"""
+    try:
+        info = await _ros_request(host, port, username, password,
+                                  "system/resource", use_ssl=use_ssl, timeout=5)
+        return {
+            "success": True,
+            "version": info.get("version", ""),
+            "board_name": info.get("board-name", info.get("board_name", "")),
+            "uptime": info.get("uptime", ""),
+            "cpu_load": info.get("cpu-load", info.get("cpu_load", "")),
+            "free_memory": str(int(info.get("free-memory", info.get("free_memory", "0"))) // 1024 // 1024) + " MB",
+            "total_memory": str(int(info.get("total-memory", info.get("total_memory", "0"))) // 1024 // 1024) + " MB",
+        }
+    except HTTPException as e:
+        return {"success": False, "error": e.detail}
+    except Exception as e:
+        return {"success": False, "error": str(e)[:200]}
+
+
+# ─── API 端点 ───
+
+@router.get("/devices", summary="获取设备列表")
+def get_devices():
+    conn = _get_db()
+    rows = conn.execute("SELECT * FROM devices ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return [
+        {
+            "id": r["id"], "name": r["name"], "host": r["host"],
+            "port": r["port"], "username": r["username"],
+            "use_ssl": bool(r["use_ssl"]), "group": r["grp"],
+            "password": "***" if r["password_enc"] else "",
+        }
+        for r in rows
+    ]
+
+
+@router.put("/devices", summary="保存设备")
+def save_device(device: RosCredentials):
+    device_id = hashlib.md5(f"{device.host}:{device.port}".encode()).hexdigest()[:12]
+    conn = _get_db()
+    existing = conn.execute("SELECT id FROM devices WHERE host=? AND port=?", 
+                           (device.host, device.port)).fetchone()
+    name = existing["name"] if existing else device.host
+    conn.execute("""
+        INSERT OR REPLACE INTO devices (id, name, host, port, username, password_enc, use_ssl)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (device_id, name, device.host, device.port, device.username,
+          _encrypt(device.password), int(device.use_ssl)))
+    conn.commit()
+    conn.close()
+    return {"success": True, "id": device_id}
+
+
+@router.delete("/devices/{device_id}", summary="删除设备")
+def delete_device(device_id: str):
+    conn = _get_db()
+    conn.execute("DELETE FROM devices WHERE id=?", (device_id,))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+@router.patch("/devices/{device_id}", summary="重命名设备")
+def rename_device(device_id: str, name: str = Query(...)):
+    conn = _get_db()
+    conn.execute("UPDATE devices SET name=? WHERE id=?", (name, device_id))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
+
+@router.get("/devices/{device_id}/connect", summary="连接设备获取系统信息")
+def connect_device(device_id: str):
+    conn = _get_db()
+    r = conn.execute("SELECT * FROM devices WHERE id=?", (device_id,)).fetchone()
+    conn.close()
+    if not r:
+        raise HTTPException(404, "设备不存在")
+
+    password = _decrypt(r["password_enc"]) if r["password_enc"] else ""
+    return asyncio.run(_quick_test(
+        r["host"], r["port"], r["username"], password, bool(r["use_ssl"])
+    ))
+
+
+@router.get("/test", summary="测试连接")
+def test_connection(
+    host: str = Query(...), port: int = Query(default=443),
+    username: str = Query(...), password: str = Query(...),
+    use_ssl: bool = Query(default=True),
+):
+    return asyncio.run(_quick_test(host, port, username, password, use_ssl))
+
+
+@router.get("/system", summary="获取系统资源")
+def get_system(device_id: str = Query(...)):
+    conn = _get_db()
+    r = conn.execute("SELECT * FROM devices WHERE id=?", (device_id,)).fetchone()
+    conn.close()
+    if not r:
+        raise HTTPException(404, "设备不存在")
+    password = _decrypt(r["password_enc"]) if r["password_enc"] else ""
+    return asyncio.run(_ros_request(
+        r["host"], r["port"], r["username"], password,
+        "system/resource", use_ssl=bool(r["use_ssl"])
+    ))
+
+
+@router.get("/interfaces", summary="获取接口列表")
+def get_interfaces(device_id: str = Query(...)):
+    conn = _get_db()
+    r = conn.execute("SELECT * FROM devices WHERE id=?", (device_id,)).fetchone()
+    conn.close()
+    if not r:
+        raise HTTPException(404, "设备不存在")
+    password = _decrypt(r["password_enc"]) if r["password_enc"] else ""
+    return asyncio.run(_ros_request(
+        r["host"], r["port"], r["username"], password,
+        "interface", use_ssl=bool(r["use_ssl"])
+    ))

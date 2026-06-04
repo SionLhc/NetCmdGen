@@ -84,6 +84,11 @@ const router = createRouter({
       name: 'SshTerminal',
       component: () => import('@/views/SshTerminal.vue'),
     },
+    {
+      path: '/ros',
+      name: 'RosConsole',
+      component: () => import('@/views/RosConsole.vue'),
+    },
   ],
 })
 
