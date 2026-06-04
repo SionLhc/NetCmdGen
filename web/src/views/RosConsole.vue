@@ -75,7 +75,10 @@
       <el-form label-width="80px" size="default" @submit.prevent="handleAddDevice">
         <el-form-item label="设备名称"><el-input v-model="formName" placeholder="Core-R1" /></el-form-item>
         <el-form-item label="IP 地址"><el-input v-model="formHost" placeholder="192.168.88.1" /></el-form-item>
-        <el-form-item label="端口"><el-input-number v-model="formPort" :min="1" :max="65535" /></el-form-item>
+        <el-form-item label="端口">
+          <el-input-number v-model="formPort" :min="1" :max="65535" />
+          <span style="font-size:11px;color:#909399;margin-left:8px">REST API (443), 非 Winbox (8291)</span>
+        </el-form-item>
         <el-form-item label="用户名"><el-input v-model="formUser" placeholder="admin" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="formPass" type="password" placeholder="输入密码" show-password /></el-form-item>
         <el-form-item label="使用 SSL"><el-switch v-model="formSsl" /></el-form-item>

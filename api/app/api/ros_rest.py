@@ -100,7 +100,7 @@ async def _ros_request(host: str, port: int, username: str, password: str,
 
 async def _quick_test(host: str, port: int, username: str, password: str,
                       use_ssl: bool = True) -> dict:
-    """快速连接测试"""
+    """快速连接测试，返回含中文提示的诊断信息"""
     try:
         info = await _ros_request(host, port, username, password,
                                   "system/resource", use_ssl=use_ssl, timeout=5)
@@ -114,9 +114,25 @@ async def _quick_test(host: str, port: int, username: str, password: str,
             "total_memory": str(int(info.get("total-memory", info.get("total_memory", "0"))) // 1024 // 1024) + " MB",
         }
     except HTTPException as e:
-        return {"success": False, "error": e.detail}
+        # 根据状态码给出中文提示
+        if e.status_code == 401 or e.status_code == 403:
+            msg = "认证失败：用户名或密码错误"
+        elif e.status_code == 404:
+            msg = "REST API 不可用：请确认 RouterOS ≥ v7.1 且 www-ssl 服务已启用 (/ip service enable www-ssl)"
+        else:
+            msg = f"HTTP {e.status_code}: {e.detail[:100]}"
+        return {"success": False, "error": msg}
     except Exception as e:
-        return {"success": False, "error": str(e)[:200]}
+        err = str(e)
+        if "ConnectionRefused" in err or "connect" in err.lower():
+            msg = f"连接被拒绝：请确认 IP/端口正确，设备 WebFig 服务是否启用（默认端口 443，Winbox 端口 8291 不可用）"
+        elif "SSL" in err or "ssl" in err.lower() or "certificate" in err.lower():
+            msg = "SSL 证书错误：尝试关闭 SSL 开关使用 HTTP 连接（端口改为 80）"
+        elif "timeout" in err.lower() or "Timeout" in err:
+            msg = "连接超时：设备不可达或端口不通"
+        else:
+            msg = err[:200]
+        return {"success": False, "error": msg}
 
 
 # ─── API 端点 ───
