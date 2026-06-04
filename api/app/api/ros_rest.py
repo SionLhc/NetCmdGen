@@ -265,8 +265,12 @@ def _is_api_port(port: int) -> bool:
 def proxy_get(device_id: str = Query(...), path: str = Query(..., description="菜单路径")):
     creds = _get_device_creds(device_id)
     if _is_api_port(creds["port"]):
-        return api_select(creds["host"], creds["port"], creds["username"],
-                          creds["password"], path, use_ssl=creds["use_ssl"])
+        try:
+            result = api_select(creds["host"], creds["port"], creds["username"],
+                                creds["password"], path, use_ssl=creds["use_ssl"])
+            return result
+        except Exception as e:
+            raise HTTPException(500, f"API 查询失败 [{path}]: {str(e)[:300]}")
     return asyncio.run(_ros_request(creds["host"], creds["port"], creds["username"],
                                      creds["password"], path, use_ssl=creds["use_ssl"]))
 

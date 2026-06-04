@@ -319,14 +319,25 @@ async function loadData() {
   loading.value = true
   try {
     const r = await fetch(`/api/ros/proxy?device_id=${deviceId.value}&path=${encodeURIComponent(currentPath.value)}`)
+    if (!r.ok) {
+      const err = await r.text()
+      tableData.value = [{ '.error': `请求失败 (${r.status}): ${err.slice(0, 200)}` }]
+      tableColumns.value = ['.error']
+      return
+    }
     const data = await r.json()
     tableData.value = Array.isArray(data) ? data : [data]
     if (tableData.value.length) {
       tableColumns.value = Array.from(new Set(
         tableData.value.flatMap((r:any)=>Object.keys(r))
       )).filter(k => !k.startsWith('.') && k !== '.id').slice(0, 12)
+    } else {
+      tableColumns.value = []
     }
-  } catch { tableData.value = [] }
+  } catch (e: any) {
+    tableData.value = [{ '.error': `网络错误: ${e.message}` }]
+    tableColumns.value = ['.error']
+  }
   finally { loading.value = false }
 }
 
