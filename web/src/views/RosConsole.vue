@@ -24,17 +24,17 @@
 
     <!-- 接口选择条（当前设备） -->
     <div class="iface-strip" v-if="activeDev && devIfaces[activeDev]?.length">
-      <span style="font-size:11px;color:rgba(255,255,255,.3);margin-right:8px">Interfaces:</span>
+      <span style="font-size:11px;color:#94a3b8;margin-right:8px">Interfaces:</span>
       <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
         :class="{on: isStreamActive(activeDev, f.index)}"
         @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
         {{ f.name }}
       </div>
-      <span v-if="devIfaces[activeDev]?.length" style="font-size:10px;color:rgba(255,255,255,.15);margin-left:8px">
+      <span v-if="devIfaces[activeDev]?.length" style="font-size:10px;color:#94a3b8;margin-left:8px">
         点击切换监控
       </span>
     </div>
-    <div class="iface-strip" v-else-if="activeDev" style="color:rgba(255,255,255,.2);font-size:11px;padding:6px 24px">
+    <div class="iface-strip" v-else-if="activeDev" style="color:#94a3b8;font-size:11px;padding:6px 24px">
       Loading interfaces...
     </div>
 
@@ -74,8 +74,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="width:52px;height:52px;opacity:.25;margin-bottom:12px">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
         </svg>
-        <p style="font-size:13px;color:rgba(255,255,255,.35)">Add a device and select interfaces</p>
-        <p style="font-size:11px;color:rgba(255,255,255,.18)">SNMP must be enabled: /snmp set enabled=yes</p>
+        <p style="font-size:13px;color:#94a3b8">Add a device and select interfaces</p>
+        <p style="font-size:11px;color:#94a3b8">SNMP must be enabled: /snmp set enabled=yes</p>
       </div>
     </div>
 
@@ -259,7 +259,7 @@ function renderChart() {
 
   chart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: 'rgba(10,15,30,.95)', borderColor: '#334', textStyle: { fontSize: 11 } },
+    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,.95)', borderColor: '#e2e8f0', textStyle: { fontSize: 11 } },
     legend: {
       bottom: 0, textStyle: { color: '#8899aa', fontSize: 10 },
       type: 'scroll',
@@ -267,15 +267,15 @@ function renderChart() {
     grid: { top: 16, right: 20, bottom: 40, left: 55 },
     xAxis: {
       type: 'category', data: labels, boundaryGap: false,
-      axisLabel: { fontSize: 10, color: '#667788' },
-      axisLine: { lineStyle: { color: '#334' } },
+      axisLabel: { fontSize: 10, color: '#94a3b8' },
+      axisLine: { lineStyle: { color: '#e2e8f0' } },
       splitLine: { show: false },
     },
     yAxis: {
       type: 'value', name: 'Mbps',
       nameTextStyle: { fontSize: 10, color: '#556' },
       axisLabel: { fontSize: 10, color: '#556' },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,.05)' } },
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
     },
     series,
   }, true)
@@ -284,15 +284,15 @@ function renderChart() {
 
 <style>
 /* 全局暗色覆盖 */
-html, body { background: #0a0f1a; }
+
 </style>
 
 <style scoped>
 .dash-app {
   height: calc(100vh - 60px);
   display: flex; flex-direction: column;
-  background: linear-gradient(160deg, #0a0f1e 0%, #0f172a 40%, #1a1030 100%);
-  color: #e0e8f0; font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+  background: #f5f6fa;
+  color: #1e293b; font-family: 'Inter', 'Microsoft YaHei', sans-serif;
   overflow: hidden;
 }
 
@@ -300,9 +300,9 @@ html, body { background: #0a0f1a; }
 .dash-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 24px;
-  background: rgba(15,23,42,.7);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: #fff;
+  
+  border-bottom: 1px solid #e5e7eb;
 }
 .hd-left { display: flex; align-items: center; gap: 10px; }
 .hd-logo { font-size: 20px; }
@@ -310,29 +310,29 @@ html, body { background: #0a0f1a; }
 .hd-badge { font-size: 11px; background: rgba(99,102,241,.2); color: #a5b4fc; padding: 2px 10px; border-radius: 10px; }
 .hd-right { display: flex; gap: 8px; }
 .hd-btn {
-  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
-  color: #c8d2e0; padding: 6px 14px; border-radius: 6px;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  color: #475569; padding: 6px 14px; border-radius: 6px;
   font-size: 12px; cursor: pointer; transition: .15s;
 }
-.hd-btn:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); }
+.hd-btn:hover { background: rgba(255,255,255,.12); border-color:#94a3b8; }
 
 /* ── 设备栏 ── */
 .dev-bar {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 24px; overflow-x: auto;
-  border-bottom: 1px solid rgba(255,255,255,.04);
+  border-bottom: 1px solid #e5e7eb;
 }
 .dev-chip {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 14px; border-radius: 20px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
+  background: #fff; border: 1px solid #e2e8f0;
   font-size: 12px; cursor: pointer; white-space: nowrap; transition: .15s;
 }
-.dev-chip:hover { background: rgba(255,255,255,.08); }
-.dev-chip.active { background: rgba(99,102,241,.15); border-color: rgba(99,102,241,.4); }
+.dev-chip:hover { background: #f1f5f9; }
+.dev-chip.active { background: #eff6ff; border-color: #93c5fd; }
 .dev-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; }
-.dev-arrow { font-size: 10px; color: #667; margin-left: 2px; }
-.dev-empty { font-size: 12px; color: #556; padding: 4px 0; }
+.dev-arrow { font-size: 10px; color: #94a3b8; margin-left: 2px; }
+.dev-empty { font-size: 12px; color: #94a3b8; padding: 4px 0; }
 
 /* 接口下拉 */
 .iface-row {
@@ -351,30 +351,30 @@ html, body { background: #0a0f1a; }
 }
 .stat-tile {
   min-width: 180px; padding: 12px 16px; border-radius: 12px;
-  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
+  background: #fff; border: 1px solid #e2e8f0;
   flex-shrink: 0;
 }
 .stat-tile.rx-dominant { border-left: 3px solid #6366f1; }
 .stat-tile.tx-dominant { border-left: 3px solid #f59e0b; }
 .tile-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.tile-dev { font-size: 11px; font-weight: 600; color: #8899aa; }
-.tile-iface { font-size: 11px; color: #556; }
-.tile-close { margin-left: auto; cursor: pointer; font-size: 10px; color: #445; }
+.tile-dev { font-size: 11px; font-weight: 600; color: #64748b; }
+.tile-iface { font-size: 11px; color: #94a3b8; }
+.tile-close { margin-left: auto; cursor: pointer; font-size: 10px; color: #94a3b8; }
 .tile-close:hover { color: #ef4444; }
 .tile-val { display: flex; gap: 16px; }
 .tile-rx, .tile-tx { display: flex; align-items: baseline; gap: 2px; }
 .tile-dir { font-size: 10px; }
 .tile-rx .tile-dir { color: #6366f1; }
 .tile-tx .tile-dir { color: #f59e0b; }
-.tile-num { font-size: 22px; font-weight: 700; font-family: monospace; color: #e0e8f0; }
-.tile-unit { font-size: 10px; color: #556; margin-left: 2px; }
+.tile-num { font-size: 22px; font-weight: 700; font-family: monospace; color: #1e293b; }
+.tile-unit { font-size: 10px; color: #94a3b8; margin-left: 2px; }
 .stat-hint {
-  font-size: 13px; color: rgba(255,255,255,.2); text-align: center; flex: 1;
+  font-size: 13px; color:#94a3b8; text-align: center; flex: 1;
 }
 
 /* ── 图表 ── */
 .chart-wrap { flex: 1; position: relative; margin: 0 24px 16px; border-radius: 12px;
-  background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05); overflow: hidden; }
+  background: #fff; border: 1px solid #e5e7eb; overflow: hidden; }
 .chart-canvas { width: 100%; height: 100%; }
 .chart-empty {
   position: absolute; inset: 0; display: flex; flex-direction: column;
