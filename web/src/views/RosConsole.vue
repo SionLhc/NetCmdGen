@@ -13,10 +13,11 @@
       </div>
     </header>
 
-    <!-- 控制栏 -->
-    <div class="control-bar">
-      <el-select v-model="activeDev" placeholder="选择设备" size="default" style="width:220px"
-        @change="onDevSelect" :loading="loadingDevices">
+    <!-- 控制栏：多选设备 -->
+    <div class="control-bar" style="flex-wrap:wrap">
+      <el-select v-model="selectedDevs" placeholder="选择设备（可多选）" size="default" style="min-width:220px"
+        multiple collapse-tags collapse-tags-tooltip :loading="loadingDevices"
+        @change="onDevsChange">
         <el-option v-for="d in devices" :key="d.id" :label="d.name || d.host" :value="d.id">
           <span style="display:flex;align-items:center;gap:8px">
             <span class="dev-dot-sm"></span>{{ d.name || d.host }}
@@ -24,19 +25,24 @@
           </span>
         </el-option>
       </el-select>
-      <span class="control-sep" v-if="activeDev && devIfaces[activeDev]?.length"></span>
-      <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
-        :class="{on: isStreamActive(activeDev, f.index)}"
-        v-show="activeDev && devIfaces[activeDev]?.length"
-        @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
+    </div>
+
+    <!-- 每个选中设备的接口标签行 -->
+    <div v-for="devId in selectedDevs" :key="devId" class="iface-row-bar">
+      <span class="iface-row-label">{{ getDev(devId)?.name || getDev(devId)?.host }}</span>
+      <span class="iface-row-loading" v-if="!devIfaces[devId]">加载中...</span>
+      <span class="iface-row-error" v-if="Array.isArray(devIfaces[devId]) && devIfaces[devId].length === 0">
+        ⚠ SNMP 不可达
+      </span>
+      <div v-for="f in (devIfaces[devId] || [])" :key="f.index" class="iface-tag"
+        :class="{on: isStreamActive(devId, f.index)}"
+        @click="toggleStream(getDev(devId)!, f)">
         <span class="iface-name">{{ f.name }}</span>
         <span class="iface-speed">{{ f.speed_label }}</span>
       </div>
-      <span v-if="activeDev && devIfaces[activeDev] === undefined" style="font-size:11px;color:#94a3b8">加载接口中...</span>
-      <span v-if="activeDev && Array.isArray(devIfaces[activeDev]) && devIfaces[activeDev].length === 0" style="font-size:11px;color:#ef4444">
-        ⚠ SNMP 不可达 — 请开启 /snmp set enabled=yes
-      </span>
-      <span v-if="!activeDev" style="font-size:11px;color:#94a3b8">选择设备后点击接口标签开始监控</span>
+    </div>
+    <div class="iface-row-bar" v-if="!selectedDevs.length" style="color:#94a3b8;font-size:11px">
+      多选设备 → 点击接口标签开始监控 → 下方卡片对比查看
     </div>
 
     <!-- 监控卡片网格（等切片下次刷新即有数据） -->
@@ -47,7 +53,7 @@
             <span class="card-dev">{{ s.dev?.name || s.dev?.host }}</span>
             <span class="card-arrow">›</span>
             <span class="card-iface">{{ s.iface?.name }}</span>
-            <span class="card-close" @click="toggleStream(s.dev!, s.iface!)">✕</span>
+            <span class="card-close" @click="removeStream(streams.findIndex(x=>x.key===s.key))">✕</span>
           </div>
           <div class="card-speeds">
             <div class="speed-box speed-down">
@@ -116,13 +122,17 @@ interface Stream {
 
 /* ── 设备管理 ── */
 const devices = ref<Dev[]>([])
-const activeDev = ref('')
+const selectedDevs = ref<string[]>([])        // 多选设备 ID
 const devIfaces = ref<Record<string, Iface[]>>({})
 const form = reactive({ name: '', host: '' })
 const showAdd = ref(false)
 const loadingDevices = ref(false)
 
 onMounted(() => { loadDevices() })
+
+function getDev(id: string): Dev | undefined {
+  return devices.value.find(x => x.id === id)
+}
 
 async function loadDevices() {
   loadingDevices.value = true
@@ -139,23 +149,26 @@ async function saveDev() {
 }
 
 async function fetchIfaces(id: string) {
-  const d = devices.value.find(x => x.id === id)
+  const d = getDev(id)
   if (!d) return
   try {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 6000)  // 6 秒超时（SNMP WALK 较慢）
+    const timer = setTimeout(() => ctrl.abort(), 6000)
     const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`, { signal: ctrl.signal })
     clearTimeout(timer)
     devIfaces.value[id] = await r.json()
   } catch {
     devIfaces.value[id] = []
-    ElMessage.error('SNMP 超时，请检查设备是否开启 SNMP：/snmp set enabled=yes')
+    ElMessage.error(`SNMP 超时 (${getDev(id)?.host})`)
   }
 }
 
-async function onDevSelect(id: string) {
-  if (!id) return
-  if (!devIfaces.value[id]) await fetchIfaces(id)
+async function onDevsChange(ids: string[]) {
+  // 并行加载所有新选中设备的接口
+  await Promise.all(ids.map(id => {
+    if (!devIfaces.value[id]) return fetchIfaces(id)
+    return Promise.resolve()
+  }))
 }
 
 /* ── 多流管理 ── */
@@ -361,6 +374,20 @@ onUnmounted(() => {
 }
 .control-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 2px; }
 .dev-dot-sm { width: 6px; height: 6px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
+
+/* ── 每设备一行接口标签 ── */
+.iface-row-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 24px; flex-wrap: wrap;
+  border-bottom: 1px solid #f1f5f9; background: #fafbfc;
+}
+.iface-row-label {
+  font-size: 11px; font-weight: 600; color: #64748b;
+  min-width: 100px; white-space: nowrap;
+}
+.iface-row-loading { font-size: 11px; color: #94a3b8; }
+.iface-row-error { font-size: 11px; color: #ef4444; }
+
 .iface-tag {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
