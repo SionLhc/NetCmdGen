@@ -22,20 +22,18 @@
       <div v-if="!devices.length" class="dev-empty">No devices — click + Add Device</div>
     </div>
 
-    <!-- 接口选择条（当前设备） -->
+    <!-- 接口选择条 -->
     <div class="iface-strip" v-if="activeDev && devIfaces[activeDev]?.length">
-      <span style="font-size:11px;color:#94a3b8;margin-right:8px">Interfaces:</span>
+      <span class="iface-label">Interfaces</span>
       <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
         :class="{on: isStreamActive(activeDev, f.index)}"
         @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
-        {{ f.name }}
+        <span class="iface-name">{{ f.name }}</span>
+        <span class="iface-speed">{{ f.speed_label }}</span>
       </div>
-      <span v-if="devIfaces[activeDev]?.length" style="font-size:10px;color:#94a3b8;margin-left:8px">
-        点击切换监控
-      </span>
     </div>
-    <div class="iface-strip" v-else-if="activeDev" style="color:#94a3b8;font-size:11px;padding:6px 24px">
-      Loading interfaces...
+    <div class="iface-strip iface-strip-loading" v-else-if="activeDev">
+      Loading interface list...
     </div>
 
     <!-- 速率概览卡片 -->
@@ -347,16 +345,29 @@ function renderChart() {
 /* 接口标签条 */
 .iface-strip {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 24px; flex-wrap: wrap;
+  padding: 10px 24px; flex-wrap: wrap;
   border-bottom: 1px solid #e5e7eb; background: #fafbfc;
 }
-.iface-tag {
-  padding: 4px 12px; border-radius: 14px; font-size: 11px; cursor: pointer;
-  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
-  transition: all .15s; white-space: nowrap;
+.iface-strip-loading {
+  color: #94a3b8; font-size: 12px; padding: 10px 24px;
 }
-.iface-tag:hover { background: #e2e8f0; }
-.iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; }
+.iface-label {
+  font-size: 11px; color: #94a3b8; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+.iface-tag {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 16px; font-size: 11px; cursor: pointer;
+  background: #fff; color: #475569; border: 1px solid #e2e8f0;
+  transition: all .15s; white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+}
+.iface-tag:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; box-shadow: 0 2px 6px rgba(99,102,241,.25); }
+.iface-name { font-weight: 500; }
+.iface-speed { font-size: 10px; opacity: .7; }
+.iface-tag.on .iface-speed { opacity: .85; }
 
 /* ── 速率卡片 ── */
 .stat-row {
