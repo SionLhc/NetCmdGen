@@ -32,7 +32,10 @@
         <span class="iface-name">{{ f.name }}</span>
         <span class="iface-speed">{{ f.speed_label }}</span>
       </div>
-      <span v-if="activeDev && !devIfaces[activeDev]" style="font-size:11px;color:#94a3b8">加载接口中...</span>
+      <span v-if="activeDev && devIfaces[activeDev] === undefined" style="font-size:11px;color:#94a3b8">加载接口中...</span>
+      <span v-if="activeDev && Array.isArray(devIfaces[activeDev]) && devIfaces[activeDev].length === 0" style="font-size:11px;color:#ef4444">
+        ⚠ SNMP 不可达 — 请开启 /snmp set enabled=yes
+      </span>
       <span v-if="!activeDev" style="font-size:11px;color:#94a3b8">选择设备后点击接口标签开始监控</span>
     </div>
 
@@ -139,9 +142,15 @@ async function fetchIfaces(id: string) {
   const d = devices.value.find(x => x.id === id)
   if (!d) return
   try {
-    const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`)
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 6000)  // 6 秒超时（SNMP WALK 较慢）
+    const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`, { signal: ctrl.signal })
+    clearTimeout(timer)
     devIfaces.value[id] = await r.json()
-  } catch { devIfaces.value[id] = [] }
+  } catch {
+    devIfaces.value[id] = []
+    ElMessage.error('SNMP 超时，请检查设备是否开启 SNMP：/snmp set enabled=yes')
+  }
 }
 
 async function onDevSelect(id: string) {
