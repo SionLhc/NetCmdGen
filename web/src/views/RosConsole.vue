@@ -49,12 +49,12 @@
           <div class="card-speeds">
             <div class="speed-box speed-down">
               <span class="speed-label">▼ 下载</span>
-              <span class="speed-val">{{ s.rx >= 0 ? s.rx.toFixed(1) : '—' }}</span>
+              <span class="speed-val" :style="s.errors>2?{color:'#d1d5db'}:{}">{{ s.errors > 2 ? '—' : (s.rx >= 0 ? s.rx.toFixed(1) : '—') }}</span>
               <span class="speed-unit">Mbps</span>
             </div>
             <div class="speed-box speed-up">
               <span class="speed-label">▲ 上传</span>
-              <span class="speed-val">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
+              <span class="speed-val" :style="s.errors>2?{color:'#d1d5db'}:{}">{{ s.errors > 2 ? '—' : (s.tx >= 0 ? s.tx.toFixed(1) : '—') }}</span>
               <span class="speed-unit">Mbps</span>
             </div>
             <span v-if="s.errors > 2" style="font-size:10px;color:#ef4444;margin-left:auto">
@@ -226,7 +226,11 @@ async function pollSnapshot(stream: Stream) {
   if (!d || !f) return
   try {
     const url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
-    const r = await fetch(url)
+    // 5 秒超时，避免后台标签页卡住长时间无响应
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5000)
+    const r = await fetch(url, { signal: ctrl.signal })
+    clearTimeout(timer)
     if (!r.ok) { stream.errors++; return }
     const pt = await r.json()
     if (pt.rx_mbps !== undefined) {
