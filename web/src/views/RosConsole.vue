@@ -13,7 +13,7 @@
       </div>
     </header>
 
-    <!-- 控制栏：设备下拉 + 接口标签 -->
+    <!-- 控制栏 -->
     <div class="control-bar">
       <el-select v-model="activeDev" placeholder="选择设备" size="default" style="width:220px"
         @change="onDevSelect" :loading="loadingDevices">
@@ -24,7 +24,6 @@
           </span>
         </el-option>
       </el-select>
-
       <span class="control-sep" v-if="activeDev && devIfaces[activeDev]?.length"></span>
       <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
         :class="{on: isStreamActive(activeDev, f.index)}"
@@ -34,13 +33,12 @@
         <span class="iface-speed">{{ f.speed_label }}</span>
       </div>
       <span v-if="activeDev && !devIfaces[activeDev]" style="font-size:11px;color:#94a3b8">加载接口中...</span>
-      <span v-if="!activeDev" style="font-size:11px;color:#94a3b8">选择设备后，点击接口标签开始监控</span>
+      <span v-if="!activeDev" style="font-size:11px;color:#94a3b8">选择设备后点击接口标签开始监控</span>
     </div>
 
-    <!-- 监控卡片网格 -->
+    <!-- 监控卡片网格（等切片下次刷新即有数据） -->
     <div class="monitor-grid" v-if="streams.length">
       <div v-for="s in streams" :key="s.key" class="mon-card">
-        <!-- 卡片顶栏 -->
         <div class="card-head">
           <div class="card-dev-line">
             <span class="card-dev">{{ s.dev?.name || s.dev?.host }}</span>
@@ -59,10 +57,12 @@
               <span class="speed-val">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
               <span class="speed-unit">Mbps</span>
             </div>
+            <span style="font-size:10px;color:#94a3b8;margin-left:auto" v-if="s.points.length">
+              已采集 {{ s.points.length }} 点
+            </span>
           </div>
         </div>
-        <!-- 独立图表 -->
-        <div :ref="(el) => setChartRef(s.key, el as HTMLElement)" class="card-chart"></div>
+        <div :id="'chart-' + s.key" class="card-chart"></div>
       </div>
     </div>
 
@@ -71,9 +71,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:.2;margin-bottom:12px">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
-      <p v-if="!activeDev" style="font-size:13px;color:#94a3b8">从下拉框选择设备，点击接口标签开始</p>
-      <p v-else style="font-size:13px;color:#94a3b8">点击上方接口标签开始实时监控</p>
-      <p style="font-size:11px;color:#94a3b8">需开启 SNMP：/snmp set enabled=yes</p>
+      <p style="font-size:13px;color:#94a3b8">选择设备 → 点击接口标签 → 每5分钟采集一次</p>
+      <p style="font-size:11px;color:#94a3b8">（首次采集后约5分钟出第一个数据点）</p>
     </div>
 
     <!-- 添加设备弹窗 -->
@@ -81,12 +80,6 @@
       <el-form label-width="50px" size="default">
         <el-form-item label="名称"><el-input v-model="form.name" placeholder="如: Core-R1"/></el-form-item>
         <el-form-item label="IP"><el-input v-model="form.host" placeholder="192.168.88.1"/></el-form-item>
-        <el-form-item label="提示">
-          <span style="font-size:11px;color:#94a3b8">
-            RouterOS 需先开启 SNMP：
-            <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">/snmp set enabled=yes</code>
-          </span>
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showAdd=false">取消</el-button>
@@ -97,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
@@ -110,7 +103,7 @@ interface Stream {
   iface: Iface | null
   rx: number; tx: number
   points: { ts: number; rx: number; tx: number }[]
-  ctrl: AbortController | null
+  timer: ReturnType<typeof setInterval> | null
   chart: echarts.ECharts | null
 }
 
@@ -122,7 +115,7 @@ const form = reactive({ name: '', host: '' })
 const showAdd = ref(false)
 const loadingDevices = ref(false)
 
-onMounted(loadDevices)
+onMounted(() => { loadDevices() })
 
 async function loadDevices() {
   loadingDevices.value = true
@@ -152,16 +145,10 @@ async function onDevSelect(id: string) {
   if (!devIfaces.value[id]) await fetchIfaces(id)
 }
 
-/* ── 图表 ref 映射 ── */
-const chartEls = new Map<string, HTMLElement>()
-function setChartRef(key: string, el: HTMLElement | null) {
-  if (el) { chartEls.set(key, el); renderStreamChart(key) }
-  else chartEls.delete(key)
-}
-
 /* ── 多流管理 ── */
 const streams = ref<Stream[]>([])
-const COLORS = ['#6366f1','#06b6d4']
+const POLL_INTERVAL = 5 * 60 * 1000  // 5 分钟
+const COLORS = ['#6366f1', '#06b6d4']
 
 function isStreamActive(devId: string, ifIndex: number) {
   return streams.value.some(s => s.dev?.id === devId && s.iface?.index === ifIndex)
@@ -173,88 +160,78 @@ function toggleStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
   const exist = streams.value.findIndex(s => s.key === key)
   if (exist >= 0) {
-    streams.value[exist].ctrl?.abort()
+    removeStream(exist)
   } else {
-    startStream(d, f)
+    addStream(d, f)
   }
 }
 
-async function startStream(d: Dev, f: Iface) {
+function addStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
-  const ctrl = new AbortController()
-  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], ctrl, chart: null }
+  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], timer: null, chart: null }
   streams.value.push(stream)
 
-  // 等 DOM 渲染后初始化图表
-  await nextTick()
-  renderStreamChart(key)
+  // 等 DOM 渲染后 init 图表
+  nextTick(() => initChart(stream))
 
-  try {
-    const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${f.index}&duration_s=299`
-    const resp = await fetch(url, { signal: ctrl.signal })
-    if (!resp.ok) {
-      stream.rx = stream.tx = -1
-      ElMessage.error(`SNMP 连接失败 (${resp.status})`)
-      renderStreamChart(key)
-      return
-    }
-    const reader = resp.body!.getReader()
-    const dec = new TextDecoder(); let buf = ''
+  // 立即采集第一个快照（第二次才有速率）
+  pollSnapshot(stream)
+  // 定时轮询
+  stream.timer = setInterval(() => pollSnapshot(stream), POLL_INTERVAL)
+}
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += dec.decode(value, { stream: true })
-      const lines = buf.split('\n'); buf = lines.pop() || ''
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const pt = JSON.parse(line.slice(6))
-            if (pt.rx_mbps !== undefined) {
-              stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
-              stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
-              renderStreamChart(key)
-            }
-          } catch {}
-        }
-      }
-    }
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      // 用户停止 → 清理
-      stream.chart?.dispose()
-      const idx = streams.value.findIndex(s => s.key === key)
-      if (idx >= 0) streams.value.splice(idx, 1)
-      chartEls.delete(key)
-      return
-    }
-    ElMessage.error(`SNMP 中断: ${err.message}`)
-    stream.rx = stream.tx = -1
-    renderStreamChart(key)
-  }
+function removeStream(idx: number) {
+  const s = streams.value[idx]
+  if (s.timer) clearInterval(s.timer)
+  s.chart?.dispose()
+  streams.value.splice(idx, 1)
 }
 
 function stopAll() {
-  // 先清理所有图表
-  streams.value.forEach(s => { s.chart?.dispose(); s.ctrl?.abort() })
+  streams.value.forEach(s => {
+    if (s.timer) clearInterval(s.timer)
+    s.chart?.dispose()
+  })
   streams.value = []
-  chartEls.clear()
 }
 
-/* ── 单个图表渲染 ── */
-function renderStreamChart(key: string) {
-  const el = chartEls.get(key)
-  if (!el) return
-  const stream = streams.value.find(s => s.key === key)
-  if (!stream) return
-
-  // 初始化或复用实例
-  if (!stream.chart) {
-    stream.chart = echarts.init(el)
+/* ── 轮询快照 ── */
+async function pollSnapshot(stream: Stream) {
+  const d = stream.dev; const f = stream.iface
+  if (!d || !f) return
+  try {
+    const url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
+    const r = await fetch(url)
+    if (!r.ok) { ElMessage.error(`采集失败: ${r.status}`); return }
+    const pt = await r.json()
+    if (pt.rx_mbps !== undefined) {
+      stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
+      stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
+      updateChart(stream)
+    }
+  } catch (e: any) {
+    ElMessage.error(`采集失败: ${e.message}`)
   }
+}
 
-  const colorRx = COLORS[0]
-  const colorTx = COLORS[1]
+/* ── 图表 ── */
+function initChart(stream: Stream) {
+  const el = document.getElementById('chart-' + stream.key)
+  if (!el || el.clientHeight === 0) {
+    // DOM 还没到位，再等一帧
+    nextTick(() => initChart(stream))
+    return
+  }
+  if (stream.chart) return  // 已初始化
+  stream.chart = echarts.init(el)
+  updateChart(stream)
+}
+
+function updateChart(stream: Stream) {
+  if (!stream.chart) {
+    nextTick(() => initChart(stream))
+    return
+  }
   const dataRx = stream.points.map(p => [p.ts * 1000, p.rx])
   const dataTx = stream.points.map(p => [p.ts * 1000, p.tx])
 
@@ -265,27 +242,16 @@ function renderStreamChart(key: string) {
       backgroundColor: 'rgba(255,255,255,.95)',
       borderColor: '#e2e8f0',
       textStyle: { fontSize: 10, color: '#1e293b' },
-      formatter: (params: any[]) => {
-        if (!params.length) return ''
-        const t = new Date(params[0].data[0]).toLocaleTimeString()
-        let h = `<div style="font-weight:600">${t}</div>`
-        params.forEach(p => {
-          h += `<div style="font-size:11px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${p.color};margin-right:4px"></span>${p.seriesName} <b>${Number(p.data[1]).toFixed(2)}</b> Mbps</div>`
-        })
-        return h
-      },
     },
-    grid: { top: 14, right: 12, bottom: 14, left: 40 },
+    grid: { top: 12, right: 8, bottom: 12, left: 38 },
     xAxis: {
       type: 'time',
       axisLabel: { fontSize: 9, color: '#94a3b8' },
-      axisLine: { show: false },
-      axisTick: { show: false },
+      axisLine: { show: false }, axisTick: { show: false },
       splitLine: { show: false },
     },
     yAxis: {
-      type: 'value',
-      name: 'Mbps',
+      type: 'value', name: 'Mbps',
       nameTextStyle: { fontSize: 9, color: '#94a3b8' },
       axisLabel: { fontSize: 9, color: '#94a3b8' },
       splitLine: { lineStyle: { color: '#f1f5f9' } },
@@ -293,8 +259,8 @@ function renderStreamChart(key: string) {
     series: [
       {
         name: '▼ 下载', type: 'line', data: dataRx,
-        smooth: true, symbol: 'none',
-        lineStyle: { color: colorRx, width: 1.8 },
+        smooth: true, symbol: 'circle', symbolSize: 3,
+        lineStyle: { color: COLORS[0], width: 1.8 },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(99,102,241,.12)' },
@@ -304,12 +270,19 @@ function renderStreamChart(key: string) {
       },
       {
         name: '▲ 上传', type: 'line', data: dataTx,
-        smooth: true, symbol: 'none',
-        lineStyle: { color: colorTx, width: 1.2, type: 'dashed' },
+        smooth: true, symbol: 'circle', symbolSize: 3,
+        lineStyle: { color: COLORS[1], width: 1.2, type: 'dashed' },
       },
     ],
   }, true)
 }
+
+// 窗口 resize
+function handleResize() {
+  streams.value.forEach(s => s.chart?.resize())
+}
+onMounted(() => window.addEventListener('resize', handleResize))
+onUnmounted(() => window.removeEventListener('resize', handleResize))
 </script>
 
 <style scoped>
@@ -324,10 +297,8 @@ function renderStreamChart(key: string) {
 /* ── 顶栏 ── */
 .dash-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
+  padding: 8px 24px; background: #fff;
+  border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
 }
 .hd-left { display: flex; align-items: center; gap: 10px; }
 .hd-logo { font-size: 20px; }
@@ -343,14 +314,12 @@ function renderStreamChart(key: string) {
 
 /* ── 控制栏 ── */
 .control-bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 24px; flex-wrap: wrap;
-  border-bottom: 1px solid #e5e7eb; background: #fff;
-  flex-shrink: 0; min-height: 44px;
+  display: flex; align-items: center; gap: 8px; padding: 8px 24px;
+  flex-wrap: wrap; border-bottom: 1px solid #e5e7eb;
+  background: #fff; flex-shrink: 0; min-height: 44px;
 }
 .control-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 2px; }
 .dev-dot-sm { width: 6px; height: 6px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
-
 .iface-tag {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
@@ -363,57 +332,39 @@ function renderStreamChart(key: string) {
 .iface-speed { font-size: 10px; opacity: .65; }
 .iface-tag.on .iface-speed { opacity: .8; }
 
-/* ── 监控卡片网格 ── */
+/* ── 卡片网格 ── */
 .monitor-grid {
   flex: 1; overflow-y: auto; overflow-x: hidden;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px; padding: 12px 24px; align-content: start;
 }
-
 .mon-card {
   background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
   display: flex; flex-direction: column;
-  min-height: 240px; max-height: 360px;
-  overflow: hidden;
+  min-height: 220px; max-height: 380px; overflow: hidden;
 }
-
-/* ── 卡片头部 ── */
 .card-head {
   padding: 10px 14px 6px;
-  border-bottom: 1px solid #f1f5f9;
-  flex-shrink: 0;
+  border-bottom: 1px solid #f1f5f9; flex-shrink: 0;
 }
 .card-dev-line {
   display: flex; align-items: center; gap: 4px;
-  font-size: 11px; margin-bottom: 6px;
+  font-size: 11px; margin-bottom: 4px;
 }
 .card-dev { color: #64748b; font-weight: 600; }
 .card-arrow { color: #94a3b8; font-size: 10px; }
 .card-iface { color: #1e293b; }
-.card-close {
-  margin-left: auto; cursor: pointer;
-  font-size: 10px; color: #94a3b8; padding: 2px 4px;
-}
+.card-close { margin-left: auto; cursor: pointer; font-size: 10px; color: #94a3b8; padding: 2px 4px; }
 .card-close:hover { color: #ef4444; }
-
-.card-speeds {
-  display: flex; gap: 16px;
-}
-.speed-box {
-  display: flex; align-items: baseline; gap: 4px;
-}
+.card-speeds { display: flex; gap: 16px; align-items: baseline; }
+.speed-box { display: flex; align-items: baseline; gap: 4px; }
 .speed-label { font-size: 10px; color: #94a3b8; }
 .speed-val { font-size: 18px; font-weight: 700; }
 .speed-unit { font-size: 10px; color: #94a3b8; margin-left: 2px; }
 .speed-down .speed-val { color: #6366f1; }
 .speed-up .speed-val { color: #06b6d4; }
-
-/* ── 卡片图表 ── */
-.card-chart {
-  flex: 1; min-height: 0;
-  width: 100%;
-}
+.card-chart { flex: 1; min-height: 0; width: 100%; }
 
 /* ── 空状态 ── */
 .empty-zone {

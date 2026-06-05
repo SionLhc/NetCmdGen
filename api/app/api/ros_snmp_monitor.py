@@ -140,3 +140,54 @@ async def traffic_stream(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# 内存缓存：记录上次查询的快照值，用于差分计算
+_snapshot_cache: dict[str, tuple[int, int, float]] = {}  # key -> (last_rx, last_tx, last_ts)
+
+
+@router.get("/snapshot")
+async def traffic_snapshot(
+    host: str = Query(...),
+    if_index: int = Query(default=1),
+    community: str = Query(default="public"),
+    port: int = Query(default=161),
+):
+    """单次 SNMP 快照 — 前端每 5 分钟轮询，内部自动计算差分速率"""
+    try:
+        rx_str = await _snmp_get(host, community, f"{IF_IN_OCTETS}.{if_index}", port)
+        tx_str = await _snmp_get(host, community, f"{IF_OUT_OCTETS}.{if_index}", port)
+        now_ts = time.time()
+        now_rx = int(rx_str)
+        now_tx = int(tx_str)
+
+        cache_key = f"{host}:{if_index}"
+        rx_mbps = 0.0
+        tx_mbps = 0.0
+
+        if cache_key in _snapshot_cache:
+            last_rx, last_tx, last_ts = _snapshot_cache[cache_key]
+            elapsed = now_ts - last_ts
+            if elapsed > 0:
+                rx_bytes = max(0, now_rx - last_rx)
+                tx_bytes = max(0, now_tx - last_tx)
+                # 处理 32-bit 计数器回绕（约 4.3 GB）
+                if now_rx < last_rx:
+                    rx_bytes = (2**32 - last_rx) + now_rx
+                if now_tx < last_tx:
+                    tx_bytes = (2**32 - last_tx) + now_tx
+                rx_mbps = round((rx_bytes * 8) / elapsed / 1_000_000, 2)
+                tx_mbps = round((tx_bytes * 8) / elapsed / 1_000_000, 2)
+
+        # 更新缓存
+        _snapshot_cache[cache_key] = (now_rx, now_tx, now_ts)
+
+        return {
+            "ts": round(now_ts, 1),
+            "rx_mbps": rx_mbps,
+            "tx_mbps": tx_mbps,
+            "rx_bytes": now_rx,
+            "tx_bytes": now_tx,
+        }
+    except Exception as e:
+        raise HTTPException(500, f"SNMP 查询失败: {str(e)[:200]}")
