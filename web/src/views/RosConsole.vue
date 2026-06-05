@@ -16,8 +16,7 @@
     <!-- 控制栏：多选设备 -->
     <div class="control-bar" style="flex-wrap:wrap">
       <el-select v-model="selectedDevs" placeholder="选择设备（可多选）" size="default" style="min-width:220px"
-        multiple collapse-tags collapse-tags-tooltip :loading="loadingDevices"
-        @change="onDevsChange">
+        multiple collapse-tags collapse-tags-tooltip :loading="loadingDevices">
         <el-option v-for="d in devices" :key="d.id" :label="d.name || d.host" :value="d.id">
           <span style="display:flex;align-items:center;gap:8px">
             <span class="dev-dot-sm"></span>{{ d.name || d.host }}
@@ -163,13 +162,12 @@ async function fetchIfaces(id: string) {
   }
 }
 
-async function onDevsChange(ids: string[]) {
-  // 并行加载所有新选中设备的接口
-  await Promise.all(ids.map(id => {
-    if (!devIfaces.value[id]) return fetchIfaces(id)
-    return Promise.resolve()
-  }))
-}
+// 监听多选变化，自动加载接口
+watch(selectedDevs, (ids) => {
+  ids.forEach(id => {
+    if (!devIfaces.value[id]) fetchIfaces(id)
+  })
+}, { deep: true })
 
 /* ── 多流管理 ── */
 const streams = ref<Stream[]>([])
