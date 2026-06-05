@@ -106,7 +106,7 @@ interface Stream {
   iface: Iface | null
   rx: number; tx: number
   points: { ts: number; rx: number; tx: number }[]
-  timer: ReturnType<typeof setInterval> | null
+  timer: ReturnType<typeof setTimeout> | null
   chart: echarts.ECharts | null
   errors: number  // 连续失败次数
 }
@@ -179,24 +179,45 @@ function addStream(d: Dev, f: Iface) {
   // DOM 渲染 → 等 200ms 确保 CSS Grid 布局完成 → init
   nextTick(() => setTimeout(() => initChart(stream), 200))
 
-  // 立即采集第一个快照
-  pollSnapshot(stream)
-  stream.timer = setInterval(() => pollSnapshot(stream), POLL_INTERVAL)
+  // 立即采集，采集完自己调度下一次（递归 setTimeout，不怕后台冻结）
+  scheduleNext(stream)
+}
+
+function scheduleNext(stream: Stream) {
+  const d = stream.dev; const f = stream.iface
+  if (!d || !f) return
+  // 先采集，完成后再递归调度下一次
+  pollSnapshot(stream).finally(() => {
+    // 检查流是否还活跃（未被用户关闭）
+    if (streams.value.find(s => s.key === stream.key)) {
+      stream.timer = setTimeout(() => scheduleNext(stream), POLL_INTERVAL)
+    }
+  })
 }
 
 function removeStream(idx: number) {
   const s = streams.value[idx]
-  if (s.timer) clearInterval(s.timer)
+  if (s.timer) clearTimeout(s.timer)
   s.chart?.dispose()
   streams.value.splice(idx, 1)
 }
 
 function stopAll() {
   streams.value.forEach(s => {
-    if (s.timer) clearInterval(s.timer)
+    if (s.timer) clearTimeout(s.timer)
     s.chart?.dispose()
   })
   streams.value = []
+}
+
+// 标签页切回来时立即补采一次
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible' && streams.value.length) {
+    streams.value.forEach(s => {
+      if (s.timer) clearTimeout(s.timer)
+      scheduleNext(s)
+    })
+  }
 }
 
 /* ── 轮询快照 ── */
@@ -282,8 +303,14 @@ function updateChart(stream: Stream) {
 function handleResize() {
   streams.value.forEach(s => s.chart?.resize())
 }
-onMounted(() => window.addEventListener('resize', handleResize))
-onUnmounted(() => window.removeEventListener('resize', handleResize))
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+})
 </script>
 
 <style scoped>
