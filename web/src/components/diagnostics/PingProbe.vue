@@ -175,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { doPingStream } from '@/api'
 import * as echarts from 'echarts'
@@ -374,7 +374,6 @@ watch(() => results.value.length, () => {
     chartInstance?.resize()
   })
 })
-import { onMounted, onUnmounted } from 'vue'
 onMounted(() => window.addEventListener('resize', handleResize))
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)

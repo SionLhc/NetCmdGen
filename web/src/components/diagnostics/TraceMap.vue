@@ -150,20 +150,11 @@
         <div ref="traceChartRef" class="trace-chart"></div>
       </div>
     </div>
-
-    <!-- 旧空状态（保留兼容） -->
-    <div v-if="false" class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <circle cx="12" cy="5" r="2"/><circle cx="19" cy="19" r="2"/><circle cx="5" cy="19" r="2"/>
-        <line x1="12" y1="7" x2="7" y2="16"/><line x1="12" y1="7" x2="17" y2="16"/>
-      </svg>
-      <p>输入目标地址，点击"开始追踪"查看数据包经过的路由节点</p>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { doTraceStream } from '@/api'
 import * as echarts from 'echarts'
@@ -338,7 +329,6 @@ function renderTraceChart() {
 /* resize */
 function handleResize() { traceChart?.resize() }
 watch(() => hops.value.length, () => nextTick(() => traceChart?.resize()))
-import { onMounted, onUnmounted } from 'vue'
 onMounted(() => window.addEventListener('resize', handleResize))
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
