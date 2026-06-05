@@ -166,12 +166,10 @@ function toggleStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
   const exist = streams.value.findIndex(s => s.key === key)
   if (exist >= 0) {
-    // 移除
+    // 仅发送 abort 信号，由 catch 块负责删除（避免竞态）
     streams.value[exist].ctrl?.abort()
-    streams.value.splice(exist, 1)
-    renderChart()
   } else {
-    // 添加
+    // 添加新流
     startStream(d, f)
   }
 }
@@ -184,8 +182,17 @@ async function startStream(d: Dev, f: Iface) {
   renderChart()
 
   try {
-    const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${f.index}&duration_s=600`
+    // 注意：后端 duration_s 上限 300，这里传 299 留 1s 余量
+    const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${f.index}&duration_s=299`
     const resp = await fetch(url, { signal: ctrl.signal })
+    if (!resp.ok) {
+      // 请求失败（如 422 参数校验），保留流但标记错误
+      const errBody = await resp.text()
+      stream.rx = stream.tx = -1  // -1 表示错误状态
+      ElMessage.error(`SNMP 连接失败 (${resp.status}): ${errBody.slice(0, 80)}`)
+      renderChart()
+      return  // 不进入 reader 循环，保留流在数组中显示错误
+    }
     const reader = resp.body!.getReader()
     const dec = new TextDecoder(); let buf = ''
 
@@ -207,12 +214,20 @@ async function startStream(d: Dev, f: Iface) {
         }
       }
     }
-  } catch { /* aborted */ }
-  finally {
-    const idx = streams.value.findIndex(s => s.key === key)
-    if (idx >= 0) streams.value.splice(idx, 1)
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      // 用户手动停止 → 正常删除流
+      const idx = streams.value.findIndex(s => s.key === key)
+      if (idx >= 0) streams.value.splice(idx, 1)
+      renderChart()
+      return
+    }
+    // 其他网络错误 → 保留流，显示错误
+    ElMessage.error(`SNMP 连接中断: ${err.message}`)
+    stream.rx = stream.tx = -1
     renderChart()
   }
+  // 正常结束（连接关闭/duration 耗尽）→ 保留数据和图表
 }
 
 function stopAll() {

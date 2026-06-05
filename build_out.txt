@@ -26,38 +26,38 @@ computing gzip size...
 [2mdist/[22m[35massets/Index-kDyfDxGG.css              [39m[1m[2m    1.62 kB[22m[1m[22m[2m │ gzip:   0.63 kB[22m
 [2mdist/[22m[35massets/Home-B5mvHZDe.css               [39m[1m[2m    3.45 kB[22m[1m[22m[2m │ gzip:   1.00 kB[22m
 [2mdist/[22m[35massets/TopologyEditor-CODba55l.css     [39m[1m[2m    3.99 kB[22m[1m[22m[2m │ gzip:   1.13 kB[22m
-[2mdist/[22m[35massets/RosConsole-CpaHEm6l.css         [39m[1m[2m    4.67 kB[22m[1m[22m[2m │ gzip:   1.22 kB[22m
+[2mdist/[22m[35massets/RosConsole-0_yx7mdG.css         [39m[1m[2m    4.67 kB[22m[1m[22m[2m │ gzip:   1.22 kB[22m
 [2mdist/[22m[35massets/PingDiagnostic-COB10AFV.css     [39m[1m[2m    5.07 kB[22m[1m[22m[2m │ gzip:   1.37 kB[22m
 [2mdist/[22m[35massets/Tools-FCQxAo8s.css              [39m[1m[2m    5.15 kB[22m[1m[22m[2m │ gzip:   1.40 kB[22m
 [2mdist/[22m[35massets/TraceDiagnostic-BWI6IAZL.css    [39m[1m[2m    6.05 kB[22m[1m[22m[2m │ gzip:   1.59 kB[22m
 [2mdist/[22m[35massets/SshTerminal-IvFAKdtj.css        [39m[1m[2m    7.43 kB[22m[1m[22m[2m │ gzip:   2.56 kB[22m
 [2mdist/[22m[35massets/Generator-BOvSF8L1.css          [39m[1m[2m   28.02 kB[22m[1m[22m[2m │ gzip:   4.29 kB[22m
 [2mdist/[22m[35massets/index-L106F4ie.css              [39m[1m[2m  360.01 kB[22m[1m[22m[2m │ gzip:  48.62 kB[22m
-[2mdist/[22m[36massets/Diagnostics-CBARVXgJ.js         [39m[1m[2m    0.26 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
-[2mdist/[22m[36massets/useSseStream-CfoVPCLW.js        [39m[1m[2m    1.45 kB[22m[1m[22m[2m │ gzip:   0.83 kB[22m
-[2mdist/[22m[36massets/Manual-DbhIPEPa.js              [39m[1m[2m    3.02 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
-[2mdist/[22m[36massets/MtuDiagnostic-DZGD3pQN.js       [39m[1m[2m    3.54 kB[22m[1m[22m[2m │ gzip:   1.80 kB[22m
-[2mdist/[22m[36massets/Index-CG2A5ubH.js               [39m[1m[2m    3.91 kB[22m[1m[22m[2m │ gzip:   1.56 kB[22m
-[2mdist/[22m[36massets/HttpDiagnostic-DThss1Ck.js      [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   2.00 kB[22m
-[2mdist/[22m[36massets/DnsDiagnostic-BiR4HihR.js       [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   2.12 kB[22m
-[2mdist/[22m[36massets/TcpPortDiagnostic-D9Xxmhs5.js   [39m[1m[2m    5.03 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m
-[2mdist/[22m[36massets/Home-zx6gIO02.js                [39m[1m[2m    5.29 kB[22m[1m[22m[2m │ gzip:   2.26 kB[22m
-[2mdist/[22m[36massets/HistoryDiagnostic-n-l7-iTR.js   [39m[1m[2m    5.52 kB[22m[1m[22m[2m │ gzip:   2.67 kB[22m
-[2mdist/[22m[36massets/JitterDiagnostic-NzfGEkcM.js    [39m[1m[2m    5.79 kB[22m[1m[22m[2m │ gzip:   2.53 kB[22m
-[2mdist/[22m[36massets/RosConsole-BES0Hc-t.js          [39m[1m[2m    7.81 kB[22m[1m[22m[2m │ gzip:   3.41 kB[22m
-[2mdist/[22m[36massets/TraceDiagnostic-DFys_Ymo.js     [39m[1m[2m    9.08 kB[22m[1m[22m[2m │ gzip:   3.84 kB[22m
-[2mdist/[22m[36massets/PingDiagnostic-C-yg8Djr.js      [39m[1m[2m   10.49 kB[22m[1m[22m[2m │ gzip:   4.25 kB[22m
+[2mdist/[22m[36massets/Diagnostics-BJazU0iD.js         [39m[1m[2m    0.26 kB[22m[1m[22m[2m │ gzip:   0.23 kB[22m
+[2mdist/[22m[36massets/useSseStream-uymJha06.js        [39m[1m[2m    1.45 kB[22m[1m[22m[2m │ gzip:   0.83 kB[22m
+[2mdist/[22m[36massets/Manual-BaAh7vyI.js              [39m[1m[2m    3.02 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
+[2mdist/[22m[36massets/MtuDiagnostic-DIbytK5b.js       [39m[1m[2m    3.54 kB[22m[1m[22m[2m │ gzip:   1.79 kB[22m
+[2mdist/[22m[36massets/Index-CZXF54b5.js               [39m[1m[2m    3.91 kB[22m[1m[22m[2m │ gzip:   1.56 kB[22m
+[2mdist/[22m[36massets/HttpDiagnostic-Cbbld4ab.js      [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   2.00 kB[22m
+[2mdist/[22m[36massets/DnsDiagnostic-DDhKzQgL.js       [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   2.12 kB[22m
+[2mdist/[22m[36massets/TcpPortDiagnostic-DUFiT7W0.js   [39m[1m[2m    5.03 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m
+[2mdist/[22m[36massets/Home-47PqVDVp.js                [39m[1m[2m    5.29 kB[22m[1m[22m[2m │ gzip:   2.26 kB[22m
+[2mdist/[22m[36massets/HistoryDiagnostic-BXQvfBm2.js   [39m[1m[2m    5.52 kB[22m[1m[22m[2m │ gzip:   2.67 kB[22m
+[2mdist/[22m[36massets/JitterDiagnostic-C7txfroL.js    [39m[1m[2m    5.79 kB[22m[1m[22m[2m │ gzip:   2.52 kB[22m
+[2mdist/[22m[36massets/RosConsole-BCex_cMg.js          [39m[1m[2m    8.00 kB[22m[1m[22m[2m │ gzip:   3.54 kB[22m
+[2mdist/[22m[36massets/TraceDiagnostic-CGWbjJNY.js     [39m[1m[2m    9.08 kB[22m[1m[22m[2m │ gzip:   3.84 kB[22m
+[2mdist/[22m[36massets/PingDiagnostic-D-qDYJ_8.js      [39m[1m[2m   10.49 kB[22m[1m[22m[2m │ gzip:   4.25 kB[22m
 [2mdist/[22m[36massets/index-CqnY1jsH.js               [39m[1m[2m   44.76 kB[22m[1m[22m[2m │ gzip:  17.56 kB[22m
-[2mdist/[22m[36massets/Tools-BukQIaSS.js               [39m[1m[2m   67.00 kB[22m[1m[22m[2m │ gzip:  20.92 kB[22m
-[2mdist/[22m[36massets/TopologyEditor-v4F4kmiS.js      [39m[1m[2m  140.58 kB[22m[1m[22m[2m │ gzip:  46.66 kB[22m
-[2mdist/[22m[36massets/SshTerminal-CTZTF4TQ.js         [39m[1m[2m  343.36 kB[22m[1m[22m[2m │ gzip:  88.48 kB[22m
-[2mdist/[22m[36massets/Generator-DdYxx_f_.js           [39m[1m[33m  548.39 kB[39m[22m[2m │ gzip: 156.68 kB[22m
-[2mdist/[22m[36massets/deviceIcons-J3RxRSLf.js         [39m[1m[33m  561.70 kB[39m[22m[2m │ gzip: 160.85 kB[22m
-[2mdist/[22m[36massets/index-D6en1Epk.js               [39m[1m[33m1,046.48 kB[39m[22m[2m │ gzip: 345.94 kB[22m
+[2mdist/[22m[36massets/Tools-DoSuDlem.js               [39m[1m[2m   67.00 kB[22m[1m[22m[2m │ gzip:  20.92 kB[22m
+[2mdist/[22m[36massets/TopologyEditor-CeW0VwME.js      [39m[1m[2m  140.58 kB[22m[1m[22m[2m │ gzip:  46.66 kB[22m
+[2mdist/[22m[36massets/SshTerminal-_Pu_QhD5.js         [39m[1m[2m  343.36 kB[22m[1m[22m[2m │ gzip:  88.48 kB[22m
+[2mdist/[22m[36massets/Generator-CSQY3y52.js           [39m[1m[33m  548.39 kB[39m[22m[2m │ gzip: 156.68 kB[22m
+[2mdist/[22m[36massets/deviceIcons-BA25nhL-.js         [39m[1m[33m  561.70 kB[39m[22m[2m │ gzip: 160.85 kB[22m
+[2mdist/[22m[36massets/index-CNbgAuae.js               [39m[1m[33m1,046.48 kB[39m[22m[2m │ gzip: 345.93 kB[22m
 [2mdist/[22m[36massets/index-BBsSYmfd.js               [39m[1m[33m1,128.94 kB[39m[22m[2m │ gzip: 379.03 kB[22m
 [33m
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
-[32m✓ built in 17.48s[39m
+[32m✓ built in 16.35s[39m
