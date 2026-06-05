@@ -22,11 +22,11 @@ IF_SPEED = "1.3.6.1.2.1.2.2.1.5"
 
 async def _snmp_get(host: str, community: str, oid: str,
                     port: int = 161) -> str:
-    """SNMP GET — pysnmp 7.x 返回 (err_ind, err_status, err_idx, var_binds) tuple"""
+    """SNMP GET — pysnmp 7.x 返回 tuple, timeout 改为 1.5 秒"""
     result = await get_cmd(
         SnmpEngine(),
         CommunityData(community, mpModel=1),
-        await UdpTransportTarget.create((host, port), timeout=3, retries=1),
+        await UdpTransportTarget.create((host, port), timeout=1.5, retries=0),
         ContextData(),
         ObjectType(ObjectIdentity(oid)),
     )
@@ -42,15 +42,29 @@ async def _snmp_get(host: str, community: str, oid: str,
 
 async def _snmp_walk(host: str, community: str, base_oid: str,
                      port: int = 161) -> dict[int, str]:
-    """SNMP WALK — 逐个 GET 前 30 个接口"""
-    result = {}
-    for i in range(1, 31):
+    """SNMP WALK — 并行查询前 30 个接口，大幅加速"""
+    async def fetch_one(idx: int) -> tuple[int, str]:
         try:
-            val = await _snmp_get(host, community, f"{base_oid}.{i}", port)
+            val = await _snmp_get(host, community, f"{base_oid}.{idx}", port)
             if val and val.strip():
-                result[i] = val
+                return (idx, val)
         except Exception:
-            break  # 到达末位接口
+            pass
+        return (idx, "")
+
+    # 每批 10 个并发查询
+    result = {}
+    for batch_start in range(1, 31, 10):
+        batch_indices = list(range(batch_start, min(batch_start + 10, 31)))
+        tasks = [fetch_one(i) for i in batch_indices]
+        results = await asyncio.gather(*tasks)
+        for idx, val in results:
+            if val:
+                result[idx] = val
+        # 如果连续一批都没结果，假设已到最后
+        if not any(v for _, v in results):
+            break
+
     return result
 
 
@@ -60,10 +74,13 @@ async def list_interfaces(
     community: str = Query(default="public"),
     port: int = Query(default=161),
 ):
-    """获取设备接口列表"""
+    """获取设备接口列表 — 并行查询 name + speed"""
     try:
-        names = await _snmp_walk(host, community, IF_NAME, port)
-        speeds = await _snmp_walk(host, community, IF_SPEED, port)
+        # name 和 speed 并行查询
+        names, speeds = await asyncio.gather(
+            _snmp_walk(host, community, IF_NAME, port),
+            _snmp_walk(host, community, IF_SPEED, port),
+        )
         result = []
         for idx, name in names.items():
             spd = int(speeds.get(idx, "0"))
