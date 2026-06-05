@@ -13,7 +13,7 @@
       </div>
     </header>
 
-    <!-- 设备选择 + 接口筛选行 -->
+    <!-- 控制栏：设备下拉 + 接口标签 -->
     <div class="control-bar">
       <el-select v-model="activeDev" placeholder="选择设备" size="default" style="width:220px"
         @change="onDevSelect" :loading="loadingDevices">
@@ -25,52 +25,55 @@
         </el-option>
       </el-select>
 
-      <!-- 当前设备的接口标签常驻 -->
-      <template v-if="activeDev && devIfaces[activeDev]?.length">
-        <span class="control-sep"></span>
-        <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
-          :class="{on: isStreamActive(activeDev, f.index)}"
-          @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
-          <span class="iface-name">{{ f.name }}</span>
-          <span class="iface-speed">{{ f.speed_label }}</span>
-        </div>
-      </template>
-      <span v-else-if="activeDev" style="font-size:11px;color:#94a3b8">加载接口中...</span>
-      <span v-else style="font-size:11px;color:#94a3b8">添加设备后在这里选择</span>
+      <span class="control-sep" v-if="activeDev && devIfaces[activeDev]?.length"></span>
+      <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
+        :class="{on: isStreamActive(activeDev, f.index)}"
+        v-show="activeDev && devIfaces[activeDev]?.length"
+        @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
+        <span class="iface-name">{{ f.name }}</span>
+        <span class="iface-speed">{{ f.speed_label }}</span>
+      </div>
+      <span v-if="activeDev && !devIfaces[activeDev]" style="font-size:11px;color:#94a3b8">加载接口中...</span>
+      <span v-if="!activeDev" style="font-size:11px;color:#94a3b8">选择设备后，点击接口标签开始监控</span>
     </div>
 
-    <!-- 速率概览卡片 -->
-    <div class="stat-row">
-      <div v-for="s in streams" :key="s.key" class="stat-tile" :class="s.rx >= s.tx ? 'rx-dominant' : 'tx-dominant'">
-        <div class="tile-top">
-          <span class="tile-dev">{{ s.dev?.name || s.dev?.host }}</span>
-          <span class="tile-iface">{{ s.iface?.name }}</span>
-          <span class="tile-close" @click="toggleStream(s.dev!, s.iface!)">✕</span>
-        </div>
-        <div class="tile-val">
-          <div class="tile-rx">
-            <span class="tile-dir">▼</span>
-            <span class="tile-num">{{ s.rx >= 0 ? s.rx.toFixed(1) : '—' }}</span>
-            <span class="tile-unit"> Mbps</span>
+    <!-- 监控卡片网格 -->
+    <div class="monitor-grid" v-if="streams.length">
+      <div v-for="s in streams" :key="s.key" class="mon-card">
+        <!-- 卡片顶栏 -->
+        <div class="card-head">
+          <div class="card-dev-line">
+            <span class="card-dev">{{ s.dev?.name || s.dev?.host }}</span>
+            <span class="card-arrow">›</span>
+            <span class="card-iface">{{ s.iface?.name }}</span>
+            <span class="card-close" @click="toggleStream(s.dev!, s.iface!)">✕</span>
           </div>
-          <div class="tile-tx">
-            <span class="tile-dir">▲</span>
-            <span class="tile-num">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
-            <span class="tile-unit"> Mbps</span>
+          <div class="card-speeds">
+            <div class="speed-box speed-down">
+              <span class="speed-label">▼ 下载</span>
+              <span class="speed-val">{{ s.rx >= 0 ? s.rx.toFixed(1) : '—' }}</span>
+              <span class="speed-unit">Mbps</span>
+            </div>
+            <div class="speed-box speed-up">
+              <span class="speed-label">▲ 上传</span>
+              <span class="speed-val">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
+              <span class="speed-unit">Mbps</span>
+            </div>
           </div>
         </div>
-      </div>
-      <div v-if="!streams.length && activeDev" class="stat-hint">
-        点击上方接口标签开始监控流量
-      </div>
-      <div v-if="!activeDev" class="stat-hint">
-        从上方下拉框选择设备
+        <!-- 独立图表 -->
+        <div :ref="(el) => setChartRef(s.key, el as HTMLElement)" class="card-chart"></div>
       </div>
     </div>
 
-    <!-- 主图表 -->
-    <div class="chart-wrap" v-show="streams.length">
-      <div ref="chartRef" class="chart-canvas"></div>
+    <!-- 空状态 -->
+    <div class="empty-zone" v-else>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:.2;margin-bottom:12px">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <p v-if="!activeDev" style="font-size:13px;color:#94a3b8">从下拉框选择设备，点击接口标签开始</p>
+      <p v-else style="font-size:13px;color:#94a3b8">点击上方接口标签开始实时监控</p>
+      <p style="font-size:11px;color:#94a3b8">需开启 SNMP：/snmp set enabled=yes</p>
     </div>
 
     <!-- 添加设备弹窗 -->
@@ -80,7 +83,8 @@
         <el-form-item label="IP"><el-input v-model="form.host" placeholder="192.168.88.1"/></el-form-item>
         <el-form-item label="提示">
           <span style="font-size:11px;color:#94a3b8">
-            RouterOS 需先开启 SNMP：<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">/snmp set enabled=yes</code>
+            RouterOS 需先开启 SNMP：
+            <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">/snmp set enabled=yes</code>
           </span>
         </el-form-item>
       </el-form>
@@ -93,20 +97,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
-/* ── 设备 ── */
+/* ── 类型 ── */
 interface Dev { id: string; name: string; host: string; port: number }
 interface Iface { index: number; name: string; speed: number; speed_label: string }
+interface Stream {
+  key: string
+  dev: Dev | null
+  iface: Iface | null
+  rx: number; tx: number
+  points: { ts: number; rx: number; tx: number }[]
+  ctrl: AbortController | null
+  chart: echarts.ECharts | null
+}
 
+/* ── 设备管理 ── */
 const devices = ref<Dev[]>([])
 const activeDev = ref('')
 const devIfaces = ref<Record<string, Iface[]>>({})
 const form = reactive({ name: '', host: '' })
 const showAdd = ref(false)
-
 const loadingDevices = ref(false)
 
 onMounted(loadDevices)
@@ -136,24 +149,19 @@ async function fetchIfaces(id: string) {
 
 async function onDevSelect(id: string) {
   if (!id) return
-  // 设备切换时加载接口列表
   if (!devIfaces.value[id]) await fetchIfaces(id)
 }
 
-/* ── 多流管理 ── */
-interface Stream {
-  key: string
-  dev: Dev | null
-  iface: Iface | null
-  rx: number; tx: number
-  points: { ts: number; rx: number; tx: number }[]
-  ctrl: AbortController | null
+/* ── 图表 ref 映射 ── */
+const chartEls = new Map<string, HTMLElement>()
+function setChartRef(key: string, el: HTMLElement | null) {
+  if (el) { chartEls.set(key, el); renderStreamChart(key) }
+  else chartEls.delete(key)
 }
 
+/* ── 多流管理 ── */
 const streams = ref<Stream[]>([])
-const chartRef = ref<HTMLDivElement>()
-let chart: echarts.ECharts | null = null
-const COLORS = ['#6366f1','#06b6d4','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#3b82f6']
+const COLORS = ['#6366f1','#06b6d4']
 
 function isStreamActive(devId: string, ifIndex: number) {
   return streams.value.some(s => s.dev?.id === devId && s.iface?.index === ifIndex)
@@ -165,10 +173,8 @@ function toggleStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
   const exist = streams.value.findIndex(s => s.key === key)
   if (exist >= 0) {
-    // 仅发送 abort 信号，由 catch 块负责删除（避免竞态）
     streams.value[exist].ctrl?.abort()
   } else {
-    // 添加新流
     startStream(d, f)
   }
 }
@@ -176,21 +182,21 @@ function toggleStream(d: Dev, f: Iface) {
 async function startStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
   const ctrl = new AbortController()
-  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], ctrl }
+  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], ctrl, chart: null }
   streams.value.push(stream)
-  renderChart()
+
+  // 等 DOM 渲染后初始化图表
+  await nextTick()
+  renderStreamChart(key)
 
   try {
-    // 注意：后端 duration_s 上限 300，这里传 299 留 1s 余量
     const url = `/api/ros/traffic/stream?host=${encodeURIComponent(d.host)}&if_index=${f.index}&duration_s=299`
     const resp = await fetch(url, { signal: ctrl.signal })
     if (!resp.ok) {
-      // 请求失败（如 422 参数校验），保留流但标记错误
-      const errBody = await resp.text()
-      stream.rx = stream.tx = -1  // -1 表示错误状态
-      ElMessage.error(`SNMP 连接失败 (${resp.status}): ${errBody.slice(0, 80)}`)
-      renderChart()
-      return  // 不进入 reader 循环，保留流在数组中显示错误
+      stream.rx = stream.tx = -1
+      ElMessage.error(`SNMP 连接失败 (${resp.status})`)
+      renderStreamChart(key)
+      return
     }
     const reader = resp.body!.getReader()
     const dec = new TextDecoder(); let buf = ''
@@ -207,7 +213,7 @@ async function startStream(d: Dev, f: Iface) {
             if (pt.rx_mbps !== undefined) {
               stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
               stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
-              renderChart()
+              renderStreamChart(key)
             }
           } catch {}
         }
@@ -215,116 +221,96 @@ async function startStream(d: Dev, f: Iface) {
     }
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      // 用户手动停止 → 正常删除流
+      // 用户停止 → 清理
+      stream.chart?.dispose()
       const idx = streams.value.findIndex(s => s.key === key)
       if (idx >= 0) streams.value.splice(idx, 1)
-      renderChart()
+      chartEls.delete(key)
       return
     }
-    // 其他网络错误 → 保留流，显示错误
-    ElMessage.error(`SNMP 连接中断: ${err.message}`)
+    ElMessage.error(`SNMP 中断: ${err.message}`)
     stream.rx = stream.tx = -1
-    renderChart()
+    renderStreamChart(key)
   }
-  // 正常结束（连接关闭/duration 耗尽）→ 保留数据和图表
 }
 
 function stopAll() {
-  streams.value.forEach(s => s.ctrl?.abort())
+  // 先清理所有图表
+  streams.value.forEach(s => { s.chart?.dispose(); s.ctrl?.abort() })
   streams.value = []
-  renderChart()
+  chartEls.clear()
 }
 
-/* ── ECharts ── */
-function renderChart() {
-  if (!chartRef.value) return
-  if (!chart) {
-    chart = echarts.init(chartRef.value)
-    window.addEventListener('resize', () => {
-      if (chartRef.value && chartRef.value.offsetParent) chart?.resize()
-    })
+/* ── 单个图表渲染 ── */
+function renderStreamChart(key: string) {
+  const el = chartEls.get(key)
+  if (!el) return
+  const stream = streams.value.find(s => s.key === key)
+  if (!stream) return
+
+  // 初始化或复用实例
+  if (!stream.chart) {
+    stream.chart = echarts.init(el)
   }
 
-  const series: any[] = []
+  const colorRx = COLORS[0]
+  const colorTx = COLORS[1]
+  const dataRx = stream.points.map(p => [p.ts * 1000, p.rx])
+  const dataTx = stream.points.map(p => [p.ts * 1000, p.tx])
 
-  streams.value.forEach((s, i) => {
-    const color = COLORS[i % COLORS.length]
-    const label = `${s.dev?.name||s.dev?.host}/${s.iface?.name}`
-    // 时间轴用毫秒级时间戳，ECharts time 轴自动定位
-    series.push({
-      name: label + ' ▼ 下载',
-      type: 'line',
-      data: s.points.map(p => [p.ts * 1000, p.rx]),
-      smooth: true, symbol: 'none',
-      lineStyle: { color, width: 2 },
-      itemStyle: { color },
-    })
-    series.push({
-      name: label + ' ▲ 上传',
-      type: 'line',
-      data: s.points.map(p => [p.ts * 1000, p.tx]),
-      smooth: true, symbol: 'none',
-      lineStyle: { color, width: 1.5, type: 'dashed' },
-      itemStyle: { color },
-    })
-  })
-
-  chart.setOption({
+  stream.chart.setOption({
     backgroundColor: 'transparent',
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(255,255,255,.95)',
       borderColor: '#e2e8f0',
-      textStyle: { fontSize: 11, color: '#1e293b' },
+      textStyle: { fontSize: 10, color: '#1e293b' },
       formatter: (params: any[]) => {
         if (!params.length) return ''
-        const time = new Date(params[0].data[0]).toLocaleTimeString()
-        let html = `<div style="font-weight:600;margin-bottom:4px">${time}</div>`
+        const t = new Date(params[0].data[0]).toLocaleTimeString()
+        let h = `<div style="font-weight:600">${t}</div>`
         params.forEach(p => {
-          html += `<div style="display:flex;align-items:center;gap:6px">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
-            ${p.seriesName}: <b>${Number(p.data[1]).toFixed(2)} Mbps</b>
-          </div>`
+          h += `<div style="font-size:11px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${p.color};margin-right:4px"></span>${p.seriesName} <b>${Number(p.data[1]).toFixed(2)}</b> Mbps</div>`
         })
-        return html
+        return h
       },
     },
-    legend: {
-      bottom: 0,
-      textStyle: { color: '#64748b', fontSize: 10 },
-      type: 'scroll',
-    },
-    grid: { top: 16, right: 20, bottom: 36, left: 55 },
+    grid: { top: 14, right: 12, bottom: 14, left: 40 },
     xAxis: {
       type: 'time',
-      axisLabel: {
-        fontSize: 10, color: '#94a3b8',
-        formatter: (val: any) => {
-          const d = new Date(val)
-          return d.toLocaleTimeString()
-        },
-      },
-      axisLine: { lineStyle: { color: '#e2e8f0' } },
+      axisLabel: { fontSize: 9, color: '#94a3b8' },
+      axisLine: { show: false },
+      axisTick: { show: false },
       splitLine: { show: false },
     },
     yAxis: {
-      type: 'value', name: 'Mbps',
-      nameTextStyle: { fontSize: 10, color: '#94a3b8' },
-      axisLabel: { fontSize: 10, color: '#94a3b8' },
+      type: 'value',
+      name: 'Mbps',
+      nameTextStyle: { fontSize: 9, color: '#94a3b8' },
+      axisLabel: { fontSize: 9, color: '#94a3b8' },
       splitLine: { lineStyle: { color: '#f1f5f9' } },
     },
-    series,
+    series: [
+      {
+        name: '▼ 下载', type: 'line', data: dataRx,
+        smooth: true, symbol: 'none',
+        lineStyle: { color: colorRx, width: 1.8 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(99,102,241,.12)' },
+            { offset: 1, color: 'rgba(99,102,241,0)' },
+          ]),
+        },
+      },
+      {
+        name: '▲ 上传', type: 'line', data: dataTx,
+        smooth: true, symbol: 'none',
+        lineStyle: { color: colorTx, width: 1.2, type: 'dashed' },
+      },
+    ],
   }, true)
-
-  // v-show 切显时容器尺寸可能为0，强制 resize
-  nextTick(() => chart?.resize())
 }
 </script>
-
-<style>
-/* 全局暗色覆盖 */
-
-</style>
 
 <style scoped>
 .dash-app {
@@ -338,76 +324,100 @@ function renderChart() {
 /* ── 顶栏 ── */
 .dash-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 24px;
+  padding: 8px 24px;
   background: #fff;
-  
   border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 .hd-left { display: flex; align-items: center; gap: 10px; }
 .hd-logo { font-size: 20px; }
-.hd-title { font-size: 16px; font-weight: 700; letter-spacing: .5px; }
+.hd-title { font-size: 15px; font-weight: 700; }
 .hd-badge { font-size: 11px; background: rgba(99,102,241,.1); color: #6366f1; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
 .hd-right { display: flex; gap: 8px; }
 .hd-btn {
   background: #f1f5f9; border: 1px solid #e2e8f0;
-  color: #475569; padding: 6px 14px; border-radius: 6px;
+  color: #475569; padding: 5px 12px; border-radius: 6px;
   font-size: 12px; cursor: pointer; transition: .15s;
 }
 .hd-btn:hover { background: #e2e8f0; }
 
-/* ── 控制栏（设备下拉 + 接口标签） ── */
+/* ── 控制栏 ── */
 .control-bar {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 24px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 24px; flex-wrap: wrap;
   border-bottom: 1px solid #e5e7eb; background: #fff;
+  flex-shrink: 0; min-height: 44px;
 }
-.control-sep { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+.control-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 2px; }
 .dev-dot-sm { width: 6px; height: 6px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
 
-/* ── 接口标签 ── */
 .iface-tag {
-  display: flex; align-items: center; gap: 6px;
-  padding: 5px 14px; border-radius: 16px; font-size: 11px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
   background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;
   transition: all .15s; white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0,0,0,.02);
 }
 .iface-tag:hover { background: #f1f5f9; border-color: #cbd5e1; }
-.iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; box-shadow: 0 2px 6px rgba(99,102,241,.25); }
+.iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; }
 .iface-name { font-weight: 500; }
-.iface-speed { font-size: 10px; opacity: .7; }
-.iface-tag.on .iface-speed { opacity: .85; }
+.iface-speed { font-size: 10px; opacity: .65; }
+.iface-tag.on .iface-speed { opacity: .8; }
 
-/* ── 速率卡片 ── */
-.stat-row {
-  display: flex; gap: 12px; padding: 14px 24px; overflow-x: auto;
-  min-height: 80px; align-items: center;
+/* ── 监控卡片网格 ── */
+.monitor-grid {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px; padding: 12px 24px; align-content: start;
 }
-.stat-tile {
-  min-width: 180px; padding: 12px 16px; border-radius: 12px;
-  background: #fff; border: 1px solid #e2e8f0;
+
+.mon-card {
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px;
+  display: flex; flex-direction: column;
+  min-height: 240px; max-height: 360px;
+  overflow: hidden;
+}
+
+/* ── 卡片头部 ── */
+.card-head {
+  padding: 10px 14px 6px;
+  border-bottom: 1px solid #f1f5f9;
   flex-shrink: 0;
 }
-.stat-tile.rx-dominant { border-left: 3px solid #6366f1; }
-.stat-tile.tx-dominant { border-left: 3px solid #f59e0b; }
-.tile-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.tile-dev { font-size: 11px; font-weight: 600; color: #64748b; }
-.tile-iface { font-size: 11px; color: #94a3b8; }
-.tile-close { margin-left: auto; cursor: pointer; font-size: 10px; color: #94a3b8; }
-.tile-close:hover { color: #ef4444; }
-.tile-val { display: flex; gap: 16px; }
-.tile-rx, .tile-tx { display: flex; align-items: baseline; gap: 2px; }
-.tile-dir { font-size: 10px; }
-.tile-rx .tile-dir { color: #6366f1; }
-.tile-tx .tile-dir { color: #f59e0b; }
-.tile-num { font-size: 22px; font-weight: 700; font-family: monospace; color: #1e293b; }
-.tile-unit { font-size: 10px; color: #94a3b8; margin-left: 2px; }
-.stat-hint {
-  font-size: 13px; color:#94a3b8; text-align: center; flex: 1;
+.card-dev-line {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; margin-bottom: 6px;
+}
+.card-dev { color: #64748b; font-weight: 600; }
+.card-arrow { color: #94a3b8; font-size: 10px; }
+.card-iface { color: #1e293b; }
+.card-close {
+  margin-left: auto; cursor: pointer;
+  font-size: 10px; color: #94a3b8; padding: 2px 4px;
+}
+.card-close:hover { color: #ef4444; }
+
+.card-speeds {
+  display: flex; gap: 16px;
+}
+.speed-box {
+  display: flex; align-items: baseline; gap: 4px;
+}
+.speed-label { font-size: 10px; color: #94a3b8; }
+.speed-val { font-size: 18px; font-weight: 700; }
+.speed-unit { font-size: 10px; color: #94a3b8; margin-left: 2px; }
+.speed-down .speed-val { color: #6366f1; }
+.speed-up .speed-val { color: #06b6d4; }
+
+/* ── 卡片图表 ── */
+.card-chart {
+  flex: 1; min-height: 0;
+  width: 100%;
 }
 
-/* ── 图表 ── */
-.chart-wrap { flex: 1; position: relative; margin: 0 24px 16px; border-radius: 12px;
-  background: #fff; border: 1px solid #e5e7eb; overflow: hidden; min-height: 0; }
-.chart-canvas { width: 100%; height: 100%; }
+/* ── 空状态 ── */
+.empty-zone {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
 </style>
