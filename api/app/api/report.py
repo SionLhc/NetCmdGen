@@ -14,7 +14,7 @@ def generate_report(
     topology_data: dict = Body(..., description="完整的拓扑 JSON 数据"),
 ):
     """输入拓扑 JSON → 输出 Markdown 报告"""
-    devices = topology_data.get("devices", [])
+    devices = topology_data.get("devices", []) or topology_data.get("nodes", [])
     edges = topology_data.get("edges", [])
     groups = topology_data.get("groups", [])
     if not devices:
