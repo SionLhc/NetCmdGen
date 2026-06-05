@@ -612,6 +612,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  collabSocket?.close()
   document.removeEventListener('keydown', handleKeyDelete)
   graph?.dispose()
 })
