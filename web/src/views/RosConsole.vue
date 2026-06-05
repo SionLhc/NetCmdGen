@@ -152,7 +152,7 @@ async function fetchIfaces(id: string) {
   if (!d) return
   try {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 6000)
+    const timer = setTimeout(() => ctrl.abort(), 12000)
     const r = await fetch(`/api/ros/traffic/interfaces?host=${encodeURIComponent(d.host)}`, { signal: ctrl.signal })
     clearTimeout(timer)
     devIfaces.value[id] = await r.json()

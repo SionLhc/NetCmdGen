@@ -42,7 +42,7 @@ async def _snmp_get(host: str, community: str, oid: str,
 
 async def _snmp_walk(host: str, community: str, base_oid: str,
                      port: int = 161) -> dict[int, str]:
-    """SNMP WALK — 并行查询前 30 个接口，大幅加速"""
+    """SNMP WALK — 小批次并行查询"""
     async def fetch_one(idx: int) -> tuple[int, str]:
         try:
             val = await _snmp_get(host, community, f"{base_oid}.{idx}", port)
@@ -52,18 +52,21 @@ async def _snmp_walk(host: str, community: str, base_oid: str,
             pass
         return (idx, "")
 
-    # 每批 10 个并发查询
+    # 每批 5 个并发，批间休息 0.3 秒，避免压垮设备
     result = {}
-    for batch_start in range(1, 31, 10):
-        batch_indices = list(range(batch_start, min(batch_start + 10, 31)))
+    for batch_start in range(1, 31, 5):
+        batch_indices = list(range(batch_start, min(batch_start + 5, 31)))
         tasks = [fetch_one(i) for i in batch_indices]
         results = await asyncio.gather(*tasks)
+        hit = False
         for idx, val in results:
             if val:
                 result[idx] = val
-        # 如果连续一批都没结果，假设已到最后
-        if not any(v for _, v in results):
+                hit = True
+        # 连续两批都没结果 → 已到尾
+        if not hit and batch_start > 5:
             break
+        await asyncio.sleep(0.3)
 
     return result
 
