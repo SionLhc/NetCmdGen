@@ -261,7 +261,7 @@ function renderChart() {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,.95)', borderColor: '#e2e8f0', textStyle: { fontSize: 11 } },
     legend: {
-      bottom: 0, textStyle: { color: '#8899aa', fontSize: 10 },
+      bottom: 0, textStyle: { color: '#64748b', fontSize: 10 },
       type: 'scroll',
     },
     grid: { top: 16, right: 20, bottom: 40, left: 55 },
@@ -273,8 +273,8 @@ function renderChart() {
     },
     yAxis: {
       type: 'value', name: 'Mbps',
-      nameTextStyle: { fontSize: 10, color: '#556' },
-      axisLabel: { fontSize: 10, color: '#556' },
+      nameTextStyle: { fontSize: 10, color: '#94a3b8' },
+      axisLabel: { fontSize: 10, color: '#94a3b8' },
       splitLine: { lineStyle: { color: '#f1f5f9' } },
     },
     series,
@@ -307,7 +307,7 @@ function renderChart() {
 .hd-left { display: flex; align-items: center; gap: 10px; }
 .hd-logo { font-size: 20px; }
 .hd-title { font-size: 16px; font-weight: 700; letter-spacing: .5px; }
-.hd-badge { font-size: 11px; background: rgba(99,102,241,.2); color: #a5b4fc; padding: 2px 10px; border-radius: 10px; }
+.hd-badge { font-size: 11px; background: rgba(99,102,241,.1); color: #6366f1; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
 .hd-right { display: flex; gap: 8px; }
 .hd-btn {
   background: #f1f5f9; border: 1px solid #e2e8f0;
@@ -343,6 +343,20 @@ function renderChart() {
 .iface-row.checked { background: #eef2ff; }
 .iface-dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
 .iface-dot.on { background: #6366f1; }
+
+/* 接口标签条 */
+.iface-strip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 24px; flex-wrap: wrap;
+  border-bottom: 1px solid #e5e7eb; background: #fafbfc;
+}
+.iface-tag {
+  padding: 4px 12px; border-radius: 14px; font-size: 11px; cursor: pointer;
+  background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+  transition: all .15s; white-space: nowrap;
+}
+.iface-tag:hover { background: #e2e8f0; }
+.iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; }
 
 /* ── 速率卡片 ── */
 .stat-row {
