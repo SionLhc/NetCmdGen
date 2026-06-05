@@ -71,8 +71,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:.2;margin-bottom:12px">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
-      <p style="font-size:13px;color:#94a3b8">选择设备 → 点击接口标签 → 每5分钟采集一次</p>
-      <p style="font-size:11px;color:#94a3b8">（首次采集后约5分钟出第一个数据点）</p>
+      <p style="font-size:13px;color:#94a3b8">选择设备 → 点击接口标签开始</p>
+      <p style="font-size:11px;color:#94a3b8">每秒采集，显示最近 5 分钟流量趋势</p>
     </div>
 
     <!-- 添加设备弹窗 -->
@@ -147,7 +147,8 @@ async function onDevSelect(id: string) {
 
 /* ── 多流管理 ── */
 const streams = ref<Stream[]>([])
-const POLL_INTERVAL = 5 * 60 * 1000  // 5 分钟
+const POLL_INTERVAL = 1000              // 每秒采集
+const MAX_POINTS = 300                  // 只保留最近 5 分钟的数据
 const COLORS = ['#6366f1', '#06b6d4']
 
 function isStreamActive(devId: string, ifIndex: number) {
@@ -207,6 +208,10 @@ async function pollSnapshot(stream: Stream) {
     if (pt.rx_mbps !== undefined) {
       stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
       stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
+      // 只保留最近 5 分钟（300 点）
+      if (stream.points.length > MAX_POINTS) {
+        stream.points = stream.points.slice(-MAX_POINTS)
+      }
       updateChart(stream)
     }
   } catch (e: any) {
