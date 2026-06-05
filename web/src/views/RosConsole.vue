@@ -5,35 +5,38 @@
       <div class="hd-left">
         <span class="hd-logo">📡</span>
         <span class="hd-title">NetFlow Monitor</span>
-        <span class="hd-badge" v-if="streams.length">{{ streams.length }} streams</span>
+        <span class="hd-badge" v-if="streams.length">{{ streams.length }} 条监控</span>
       </div>
       <div class="hd-right">
-        <button class="hd-btn" @click="showAdd=true">+ Add Device</button>
-        <button class="hd-btn" @click="stopAll" v-if="streams.length">⏹ Stop All</button>
+        <button class="hd-btn" @click="showAdd=true">+ 添加设备</button>
+        <button class="hd-btn" @click="stopAll" v-if="streams.length">⏹ 全部停止</button>
       </div>
     </header>
 
-    <!-- 设备栏 + 接口多选 -->
-    <div class="dev-bar">
-      <div v-for="d in devices" :key="d.id" class="dev-chip" :class="{active: activeDev===d.id}" @click="onDevClick(d)">
-        <span class="dev-dot"></span>
-        <span>{{ d.name || d.host }}</span>
-      </div>
-      <div v-if="!devices.length" class="dev-empty">No devices — click + Add Device</div>
-    </div>
+    <!-- 设备选择 + 接口筛选行 -->
+    <div class="control-bar">
+      <el-select v-model="activeDev" placeholder="选择设备" size="default" style="width:220px"
+        @change="onDevSelect" :loading="loadingDevices">
+        <el-option v-for="d in devices" :key="d.id" :label="d.name || d.host" :value="d.id">
+          <span style="display:flex;align-items:center;gap:8px">
+            <span class="dev-dot-sm"></span>{{ d.name || d.host }}
+            <span style="color:#94a3b8;font-size:11px;margin-left:auto">{{ d.host }}</span>
+          </span>
+        </el-option>
+      </el-select>
 
-    <!-- 接口选择条 -->
-    <div class="iface-strip" v-if="activeDev && devIfaces[activeDev]?.length">
-      <span class="iface-label">Interfaces</span>
-      <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
-        :class="{on: isStreamActive(activeDev, f.index)}"
-        @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
-        <span class="iface-name">{{ f.name }}</span>
-        <span class="iface-speed">{{ f.speed_label }}</span>
-      </div>
-    </div>
-    <div class="iface-strip iface-strip-loading" v-else-if="activeDev">
-      Loading interface list...
+      <!-- 当前设备的接口标签常驻 -->
+      <template v-if="activeDev && devIfaces[activeDev]?.length">
+        <span class="control-sep"></span>
+        <div v-for="f in devIfaces[activeDev]" :key="f.index" class="iface-tag"
+          :class="{on: isStreamActive(activeDev, f.index)}"
+          @click="toggleStream(devices.find(x=>x.id===activeDev)!, f)">
+          <span class="iface-name">{{ f.name }}</span>
+          <span class="iface-speed">{{ f.speed_label }}</span>
+        </div>
+      </template>
+      <span v-else-if="activeDev" style="font-size:11px;color:#94a3b8">加载接口中...</span>
+      <span v-else style="font-size:11px;color:#94a3b8">添加设备后在这里选择</span>
     </div>
 
     <!-- 速率概览卡片 -->
@@ -47,45 +50,43 @@
         <div class="tile-val">
           <div class="tile-rx">
             <span class="tile-dir">▼</span>
-            <span class="tile-num">{{ s.rx }}</span>
-            <span class="tile-unit">Mbps</span>
+            <span class="tile-num">{{ s.rx >= 0 ? s.rx.toFixed(1) : '—' }}</span>
+            <span class="tile-unit"> Mbps</span>
           </div>
           <div class="tile-tx">
             <span class="tile-dir">▲</span>
-            <span class="tile-num">{{ s.tx }}</span>
-            <span class="tile-unit">Mbps</span>
+            <span class="tile-num">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
+            <span class="tile-unit"> Mbps</span>
           </div>
         </div>
       </div>
       <div v-if="!streams.length && activeDev" class="stat-hint">
-        Select interfaces from device dropdown to start monitoring
+        点击上方接口标签开始监控流量
       </div>
       <div v-if="!activeDev" class="stat-hint">
-        Click a device above, then select interfaces to monitor
+        从上方下拉框选择设备
       </div>
     </div>
 
     <!-- 主图表 -->
-    <div class="chart-wrap">
+    <div class="chart-wrap" v-show="streams.length">
       <div ref="chartRef" class="chart-canvas"></div>
-      <div v-if="!streams.length" class="chart-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="width:52px;height:52px;opacity:.25;margin-bottom:12px">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-        </svg>
-        <p style="font-size:13px;color:#94a3b8">Add a device and select interfaces</p>
-        <p style="font-size:11px;color:#94a3b8">SNMP must be enabled: /snmp set enabled=yes</p>
-      </div>
     </div>
 
-    <!-- 添加设备 -->
-    <el-dialog v-model="showAdd" title="Add RouterOS Device" width="360px">
-      <el-form label-width="60px" size="default">
-        <el-form-item label="Name"><el-input v-model="form.name" placeholder="Core-R1"/></el-form-item>
+    <!-- 添加设备弹窗 -->
+    <el-dialog v-model="showAdd" title="添加 RouterOS 设备" width="380px">
+      <el-form label-width="50px" size="default">
+        <el-form-item label="名称"><el-input v-model="form.name" placeholder="如: Core-R1"/></el-form-item>
         <el-form-item label="IP"><el-input v-model="form.host" placeholder="192.168.88.1"/></el-form-item>
+        <el-form-item label="提示">
+          <span style="font-size:11px;color:#94a3b8">
+            RouterOS 需先开启 SNMP：<code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">/snmp set enabled=yes</code>
+          </span>
+        </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAdd=false">Cancel</el-button>
-        <el-button type="primary" @click="saveDev">Save</el-button>
+        <el-button @click="showAdd=false">取消</el-button>
+        <el-button type="primary" @click="saveDev">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -106,25 +107,23 @@ const devIfaces = ref<Record<string, Iface[]>>({})
 const form = reactive({ name: '', host: '' })
 const showAdd = ref(false)
 
+const loadingDevices = ref(false)
+
 onMounted(loadDevices)
 
 async function loadDevices() {
+  loadingDevices.value = true
   try { const r = await fetch('/api/ros/devices'); devices.value = await r.json() } catch {}
+  finally { loadingDevices.value = false }
 }
 
 async function saveDev() {
-  if (!form.host) { ElMessage.warning('Enter IP'); return }
+  if (!form.host) { ElMessage.warning('请输入 IP'); return }
   await fetch('/api/ros/devices',{method:'PUT',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({name:form.name||form.host,host:form.host,port:443,username:'admin',password:''})})
   form.name = form.host = ''; showAdd.value = false
-  await loadDevices(); ElMessage.success('Saved')
+  await loadDevices(); ElMessage.success('已保存')
 }
-
-watch(activeDev, async (id) => {
-  if (!id) return
-  if (devIfaces.value[id]) return
-  await fetchIfaces(id)
-})
 
 async function fetchIfaces(id: string) {
   const d = devices.value.find(x => x.id === id)
@@ -135,10 +134,10 @@ async function fetchIfaces(id: string) {
   } catch { devIfaces.value[id] = [] }
 }
 
-async function onDevClick(d: Dev) {
-  activeDev.value = d.id
-  // 主动加载接口
-  if (!devIfaces.value[d.id]) await fetchIfaces(d.id)
+async function onDevSelect(id: string) {
+  if (!id) return
+  // 设备切换时加载接口列表
+  if (!devIfaces.value[id]) await fetchIfaces(id)
 }
 
 /* ── 多流管理 ── */
@@ -241,46 +240,70 @@ function renderChart() {
   if (!chartRef.value) return
   if (!chart) {
     chart = echarts.init(chartRef.value)
-    window.addEventListener('resize', () => chart?.resize())
+    window.addEventListener('resize', () => {
+      if (chartRef.value && chartRef.value.offsetParent) chart?.resize()
+    })
   }
 
   const series: any[] = []
-  const allTs = new Set<number>()
 
   streams.value.forEach((s, i) => {
     const color = COLORS[i % COLORS.length]
     const label = `${s.dev?.name||s.dev?.host}/${s.iface?.name}`
-    s.points.forEach(p => allTs.add(p.ts))
+    // 时间轴用毫秒级时间戳，ECharts time 轴自动定位
     series.push({
-      name: label + ' ▼',
-      type: 'line', data: s.points.map(p => [p.ts, p.rx]),
+      name: label + ' ▼ 下载',
+      type: 'line',
+      data: s.points.map(p => [p.ts * 1000, p.rx]),
       smooth: true, symbol: 'none',
       lineStyle: { color, width: 2 },
       itemStyle: { color },
     })
     series.push({
-      name: label + ' ▲',
-      type: 'line', data: s.points.map(p => [p.ts, p.tx]),
+      name: label + ' ▲ 上传',
+      type: 'line',
+      data: s.points.map(p => [p.ts * 1000, p.tx]),
       smooth: true, symbol: 'none',
       lineStyle: { color, width: 1.5, type: 'dashed' },
       itemStyle: { color },
     })
   })
 
-  const sortedTs = [...allTs].sort()
-  const labels = sortedTs.map(t => new Date(t*1000).toLocaleTimeString())
-
   chart.setOption({
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,.95)', borderColor: '#e2e8f0', textStyle: { fontSize: 11 } },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,.95)',
+      borderColor: '#e2e8f0',
+      textStyle: { fontSize: 11, color: '#1e293b' },
+      formatter: (params: any[]) => {
+        if (!params.length) return ''
+        const time = new Date(params[0].data[0]).toLocaleTimeString()
+        let html = `<div style="font-weight:600;margin-bottom:4px">${time}</div>`
+        params.forEach(p => {
+          html += `<div style="display:flex;align-items:center;gap:6px">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span>
+            ${p.seriesName}: <b>${Number(p.data[1]).toFixed(2)} Mbps</b>
+          </div>`
+        })
+        return html
+      },
+    },
     legend: {
-      bottom: 0, textStyle: { color: '#64748b', fontSize: 10 },
+      bottom: 0,
+      textStyle: { color: '#64748b', fontSize: 10 },
       type: 'scroll',
     },
-    grid: { top: 16, right: 20, bottom: 40, left: 55 },
+    grid: { top: 16, right: 20, bottom: 36, left: 55 },
     xAxis: {
-      type: 'category', data: labels, boundaryGap: false,
-      axisLabel: { fontSize: 10, color: '#94a3b8' },
+      type: 'time',
+      axisLabel: {
+        fontSize: 10, color: '#94a3b8',
+        formatter: (val: any) => {
+          const d = new Date(val)
+          return d.toLocaleTimeString()
+        },
+      },
       axisLine: { lineStyle: { color: '#e2e8f0' } },
       splitLine: { show: false },
     },
@@ -292,6 +315,9 @@ function renderChart() {
     },
     series,
   }, true)
+
+  // v-show 切显时容器尺寸可能为0，强制 resize
+  nextTick(() => chart?.resize())
 }
 </script>
 
@@ -327,56 +353,24 @@ function renderChart() {
   color: #475569; padding: 6px 14px; border-radius: 6px;
   font-size: 12px; cursor: pointer; transition: .15s;
 }
-.hd-btn:hover { background: rgba(255,255,255,.12); border-color:#94a3b8; }
+.hd-btn:hover { background: #e2e8f0; }
 
-/* ── 设备栏 ── */
-.dev-bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 24px; overflow-x: auto;
-  border-bottom: 1px solid #e5e7eb;
-}
-.dev-chip {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 14px; border-radius: 20px;
-  background: #fff; border: 1px solid #e2e8f0;
-  font-size: 12px; cursor: pointer; white-space: nowrap; transition: .15s;
-}
-.dev-chip:hover { background: #f1f5f9; }
-.dev-chip.active { background: #eff6ff; border-color: #93c5fd; }
-.dev-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; }
-.dev-arrow { font-size: 10px; color: #94a3b8; margin-left: 2px; }
-.dev-empty { font-size: 12px; color: #94a3b8; padding: 4px 0; }
-
-/* 接口下拉 */
-.iface-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 12px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #f0f0f0;
-}
-.iface-row:hover { background: #f5f7fa; }
-.iface-row.checked { background: #eef2ff; }
-.iface-dot { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
-.iface-dot.on { background: #6366f1; }
-
-/* 接口标签条 */
-.iface-strip {
-  display: flex; align-items: center; gap: 8px;
+/* ── 控制栏（设备下拉 + 接口标签） ── */
+.control-bar {
+  display: flex; align-items: center; gap: 10px;
   padding: 10px 24px; flex-wrap: wrap;
-  border-bottom: 1px solid #e5e7eb; background: #fafbfc;
+  border-bottom: 1px solid #e5e7eb; background: #fff;
 }
-.iface-strip-loading {
-  color: #94a3b8; font-size: 12px; padding: 10px 24px;
-}
-.iface-label {
-  font-size: 11px; color: #94a3b8; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.5px;
-  margin-right: 4px;
-}
+.control-sep { width: 1px; height: 20px; background: #e2e8f0; margin: 0 4px; }
+.dev-dot-sm { width: 6px; height: 6px; border-radius: 50%; background: #10b981; flex-shrink: 0; }
+
+/* ── 接口标签 ── */
 .iface-tag {
   display: flex; align-items: center; gap: 6px;
   padding: 5px 14px; border-radius: 16px; font-size: 11px; cursor: pointer;
-  background: #fff; color: #475569; border: 1px solid #e2e8f0;
+  background: #f8fafc; color: #475569; border: 1px solid #e2e8f0;
   transition: all .15s; white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  box-shadow: 0 1px 2px rgba(0,0,0,.02);
 }
 .iface-tag:hover { background: #f1f5f9; border-color: #cbd5e1; }
 .iface-tag.on { background: #6366f1; color: #fff; border-color: #6366f1; box-shadow: 0 2px 6px rgba(99,102,241,.25); }
@@ -414,10 +408,6 @@ function renderChart() {
 
 /* ── 图表 ── */
 .chart-wrap { flex: 1; position: relative; margin: 0 24px 16px; border-radius: 12px;
-  background: #fff; border: 1px solid #e5e7eb; overflow: hidden; }
+  background: #fff; border: 1px solid #e5e7eb; overflow: hidden; min-height: 0; }
 .chart-canvas { width: 100%; height: 100%; }
-.chart-empty {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-}
 </style>
