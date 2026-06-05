@@ -147,8 +147,8 @@ async function onDevSelect(id: string) {
 
 /* ── 多流管理 ── */
 const streams = ref<Stream[]>([])
-const POLL_INTERVAL = 1000              // 每秒采集
-const MAX_POINTS = 300                  // 只保留最近 5 分钟的数据
+const POLL_INTERVAL = 3000              // 3 秒采集一次（避免 SNMP 超时）
+const MAX_POINTS = 100                  // 100 点 × 3s = 5 分钟
 const COLORS = ['#6366f1', '#06b6d4']
 
 function isStreamActive(devId: string, ifIndex: number) {
@@ -172,12 +172,11 @@ function addStream(d: Dev, f: Iface) {
   const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], timer: null, chart: null }
   streams.value.push(stream)
 
-  // 等 DOM 渲染后 init 图表
-  nextTick(() => initChart(stream))
+  // Vue 渲染 → 下一帧 → 布局计算完成 → init
+  nextTick(() => requestAnimationFrame(() => initChart(stream)))
 
-  // 立即采集第一个快照（第二次才有速率）
+  // 立即采集第一个快照
   pollSnapshot(stream)
-  // 定时轮询
   stream.timer = setInterval(() => pollSnapshot(stream), POLL_INTERVAL)
 }
 
@@ -203,40 +202,32 @@ async function pollSnapshot(stream: Stream) {
   try {
     const url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
     const r = await fetch(url)
-    if (!r.ok) { ElMessage.error(`采集失败: ${r.status}`); return }
+    if (!r.ok) { console.warn(`SNMP ${d.host}:${f.index} HTTP ${r.status}`); return }
     const pt = await r.json()
     if (pt.rx_mbps !== undefined) {
       stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
       stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
-      // 只保留最近 5 分钟（300 点）
       if (stream.points.length > MAX_POINTS) {
         stream.points = stream.points.slice(-MAX_POINTS)
       }
       updateChart(stream)
     }
-  } catch (e: any) {
-    ElMessage.error(`采集失败: ${e.message}`)
+  } catch {
+    // 静默忽略网络抖动，下次重试
   }
 }
 
 /* ── 图表 ── */
 function initChart(stream: Stream) {
   const el = document.getElementById('chart-' + stream.key)
-  if (!el || el.clientHeight === 0) {
-    // DOM 还没到位，再等一帧
-    nextTick(() => initChart(stream))
-    return
-  }
-  if (stream.chart) return  // 已初始化
+  if (!el) return  // DOM 还没到，等下次 updateChart 触发
+  if (stream.chart) { stream.chart.resize(); return }
   stream.chart = echarts.init(el)
   updateChart(stream)
 }
 
 function updateChart(stream: Stream) {
-  if (!stream.chart) {
-    nextTick(() => initChart(stream))
-    return
-  }
+  if (!stream.chart) { initChart(stream); return }
   const dataRx = stream.points.map(p => [p.ts * 1000, p.rx])
   const dataTx = stream.points.map(p => [p.ts * 1000, p.tx])
 
