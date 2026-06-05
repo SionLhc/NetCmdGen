@@ -57,8 +57,11 @@
               <span class="speed-val">{{ s.tx >= 0 ? s.tx.toFixed(1) : '—' }}</span>
               <span class="speed-unit">Mbps</span>
             </div>
-            <span style="font-size:10px;color:#94a3b8;margin-left:auto" v-if="s.points.length">
-              已采集 {{ s.points.length }} 点
+            <span v-if="s.errors > 2" style="font-size:10px;color:#ef4444;margin-left:auto">
+              ⚠ {{ s.errors }} 次失败
+            </span>
+            <span v-else-if="s.points.length" style="font-size:10px;color:#94a3b8;margin-left:auto">
+              {{ s.points.length }} 点
             </span>
           </div>
         </div>
@@ -105,6 +108,7 @@ interface Stream {
   points: { ts: number; rx: number; tx: number }[]
   timer: ReturnType<typeof setInterval> | null
   chart: echarts.ECharts | null
+  errors: number  // 连续失败次数
 }
 
 /* ── 设备管理 ── */
@@ -169,11 +173,11 @@ function toggleStream(d: Dev, f: Iface) {
 
 function addStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
-  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], timer: null, chart: null }
+  const stream: Stream = { key, dev: d, iface: f, rx: 0, tx: 0, points: [], timer: null, chart: null, errors: 0 }
   streams.value.push(stream)
 
-  // Vue 渲染 → 下一帧 → 布局计算完成 → init
-  nextTick(() => requestAnimationFrame(() => initChart(stream)))
+  // DOM 渲染 → 等 200ms 确保 CSS Grid 布局完成 → init
+  nextTick(() => setTimeout(() => initChart(stream), 200))
 
   // 立即采集第一个快照
   pollSnapshot(stream)
@@ -202,9 +206,10 @@ async function pollSnapshot(stream: Stream) {
   try {
     const url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
     const r = await fetch(url)
-    if (!r.ok) { console.warn(`SNMP ${d.host}:${f.index} HTTP ${r.status}`); return }
+    if (!r.ok) { stream.errors++; return }
     const pt = await r.json()
     if (pt.rx_mbps !== undefined) {
+      stream.errors = 0  // 成功后重置
       stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
       stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
       if (stream.points.length > MAX_POINTS) {
@@ -213,7 +218,7 @@ async function pollSnapshot(stream: Stream) {
       updateChart(stream)
     }
   } catch {
-    // 静默忽略网络抖动，下次重试
+    stream.errors++
   }
 }
 
@@ -360,7 +365,7 @@ onUnmounted(() => window.removeEventListener('resize', handleResize))
 .speed-unit { font-size: 10px; color: #94a3b8; margin-left: 2px; }
 .speed-down .speed-val { color: #6366f1; }
 .speed-up .speed-val { color: #06b6d4; }
-.card-chart { flex: 1; min-height: 0; width: 100%; }
+.card-chart { flex: 1; min-height: 130px; width: 100%; }
 
 /* ── 空状态 ── */
 .empty-zone {
