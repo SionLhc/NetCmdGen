@@ -174,10 +174,10 @@ function toggleStream(d: Dev, f: Iface) {
   const key = makeKey(d, f)
   const exist = streams.value.findIndex(s => s.key === key)
   if (exist >= 0) {
-    removeStream(exist)
-  } else {
-    addStream(d, f)
+    // 已存在 → 不删除（用户应该用卡片上的 ✕ 来关闭）
+    return
   }
+  addStream(d, f)
 }
 
 function addStream(d: Dev, f: Iface) {
