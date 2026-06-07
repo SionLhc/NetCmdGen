@@ -165,6 +165,146 @@ async def traffic_stream(
 # 内存缓存：记录上次查询的快照值，用于差分计算
 _snapshot_cache: dict[str, tuple[int, int, float]] = {}  # key -> (last_rx, last_tx, last_ts)
 
+# ─── 后台自治轮询 — 取代前端驱动的 setInterval ────────────────
+# 设计思路：后端自主采集，前端只被动读缓存，彻底解决浏览器 Tab 后台冻结导致图表停更的问题
+
+_collector_task: asyncio.Task | None = None
+_collector_registry: dict[str, dict] = {}  # device_id -> {host, community, port, interfaces:[idx]}
+
+
+class SnmpCollectorStats:
+    """采集器统计信息"""
+    total_devices: int = 0
+    total_polls: int = 0
+    errors: int = 0
+    last_poll_ts: float = 0
+
+
+_collector_stats = SnmpCollectorStats()
+
+
+async def _poll_all_devices():
+    """对所有已注册设备执行一轮 SNMP 采集"""
+    global _collector_stats
+    now_ts = time.time()
+
+    for device_id, cfg in list(_collector_registry.items()):
+        host = cfg["host"]
+        community = cfg.get("community", "public")
+        port = cfg.get("port", 161)
+        if_indices = cfg.get("interfaces", [1])
+
+        for if_idx in if_indices:
+            try:
+                rx_str = await _snmp_get(host, community, f"{IF_IN_OCTETS}.{if_idx}", port)
+                tx_str = await _snmp_get(host, community, f"{IF_OUT_OCTETS}.{if_idx}", port)
+                now_rx = int(rx_str) if rx_str else 0
+                now_tx = int(tx_str) if tx_str else 0
+
+                cache_key = f"{host}:{if_idx}"
+                if cache_key in _snapshot_cache:
+                    last_rx, last_tx, last_ts = _snapshot_cache[cache_key]
+                    elapsed = now_ts - last_ts
+                    if elapsed > 0:
+                        rx_bytes = max(0, now_rx - last_rx)
+                        tx_bytes = max(0, now_tx - last_tx)
+                        if now_rx < last_rx:
+                            rx_bytes = (2**32 - last_rx) + now_rx
+                        if now_tx < last_tx:
+                            tx_bytes = (2**32 - last_tx) + now_tx
+                        # 存入最新速率值
+                        cfg.setdefault("latest", {})
+                        cfg["latest"][if_idx] = {
+                            "ts": round(now_ts, 1),
+                            "rx_mbps": round((rx_bytes * 8) / elapsed / 1_000_000, 2),
+                            "tx_mbps": round((tx_bytes * 8) / elapsed / 1_000_000, 2),
+                            "rx_bytes": now_rx,
+                            "tx_bytes": now_tx,
+                        }
+
+                _snapshot_cache[cache_key] = (now_rx, now_tx, now_ts)
+                _collector_stats.total_polls += 1
+
+            except Exception:
+                _collector_stats.errors += 1
+
+    _collector_stats.last_poll_ts = now_ts
+
+
+async def _collector_loop(poll_interval: float = 3.0):
+    """采集主循环 — 持久运行，永不停止"""
+    global _collector_stats
+    while True:
+        try:
+            await _poll_all_devices()
+        except Exception:
+            pass
+        await asyncio.sleep(poll_interval)
+
+
+def start_collector(poll_interval: float = 3.0):
+    """启动后台采集任务"""
+    global _collector_task
+    if _collector_task and not _collector_task.done():
+        return
+    _collector_task = asyncio.create_task(_collector_loop(poll_interval))
+    print(f"[SNMP Collector] 后台采集已启动，间隔 {poll_interval}s")
+
+
+def stop_collector():
+    """停止后台采集任务"""
+    global _collector_task
+    if _collector_task:
+        _collector_task.cancel()
+        _collector_task = None
+        print("[SNMP Collector] 后台采集已停止")
+
+
+@router.post("/collector/register")
+async def register_device(
+    device_id: str = Query(...),
+    host: str = Query(...),
+    community: str = Query(default="public"),
+    port: int = Query(default=161),
+    interfaces: str = Query(default="1", description="逗号分隔的接口索引"),
+):
+    """注册设备到后台采集器"""
+    if_list = [int(x.strip()) for x in interfaces.split(",") if x.strip()]
+    _collector_registry[device_id] = {
+        "host": host, "community": community, "port": port,
+        "interfaces": if_list, "latest": {},
+    }
+    return {"ok": True, "device_id": device_id, "interfaces": len(if_list)}
+
+
+@router.post("/collector/unregister")
+async def unregister_device(device_id: str = Query(...)):
+    """从采集器移除设备"""
+    if device_id in _collector_registry:
+        del _collector_registry[device_id]
+    return {"ok": True}
+
+
+@router.get("/collector/stats")
+async def collector_stats():
+    """采集器统计"""
+    return {
+        "devices": len(_collector_registry),
+        "total_polls": _collector_stats.total_polls,
+        "errors": _collector_stats.errors,
+        "last_poll_ts": _collector_stats.last_poll_ts,
+        "running": _collector_task is not None and not _collector_task.done(),
+    }
+
+
+@router.get("/collector/snapshot")
+async def collector_snapshot(device_id: str = Query(...)):
+    """从采集器缓存读取最新快照（前端被动读）"""
+    cfg = _collector_registry.get(device_id)
+    if not cfg:
+        return {"ok": False, "error": "设备未注册"}
+    return {"ok": True, "data": cfg.get("latest", {}), "ts": _collector_stats.last_poll_ts}
+
 
 @router.get("/snapshot")
 async def traffic_snapshot(

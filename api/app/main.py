@@ -1,13 +1,26 @@
 """NetCmdGen FastAPI 入口"""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.ros_snmp_monitor import start_collector, stop_collector
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """应用生命周期 — 启动/停止后台采集器"""
+    start_collector(poll_interval=3.0)
+    yield
+    stop_collector()
+
 
 app = FastAPI(
     title="NetCmdGen API",
     description="多厂商网络配置命令生成与网络工具集",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # 开发期允许前端跨域访问

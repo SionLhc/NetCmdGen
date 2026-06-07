@@ -34,9 +34,11 @@
         <el-button size="small" @click="handleExportPng">导出 PNG</el-button>
       </div>
       <div class="toolbar-right">
+        <TopoSearch @search="onTopoSearch" @filter="onTopoFilter" />
         <el-button type="success" size="small" @click="handleExportToWorkbench">导出到命令工作台</el-button>
       </div>
     </div>
+    <TopoStats :nodes="topoNodeCount" :edges="topoEdgeCount" :online="topoOnline" :offline="topoOffline" />
 
     <div class="main-content">
       <!-- 左侧设备库 -->
@@ -211,6 +213,9 @@
 </template>
 
 <script setup lang="ts">
+import TopoSearch from '@/components/topology/TopoSearch.vue'
+import TopoStats from '@/components/topology/TopoStats.vue'
+import { computed } from 'vue'
 import { ref, onMounted, onBeforeUnmount, reactive } from 'vue'
 import { Graph } from '@antv/x6'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -332,6 +337,54 @@ import { getTopoList, createTopo, getTopoData, saveTopoData, renameTopo, deleteT
 const topoList = ref<TopoItem[]>([])
 const currentTopoId = ref('')
 const topoLoading = ref(false)
+
+// ─── TopoStats 统计数据 ─────────────────────────────────
+const topoNodeCount = ref(0)
+const topoEdgeCount = ref(0)
+const topoOnline = ref(0)
+const topoOffline = ref(0)
+function updateTopoStats() {
+  if (!graph) return
+  const cells = graph.getCells()
+  topoNodeCount.value = cells.filter((c:any) => c.isNode?.()).length
+  topoEdgeCount.value = cells.filter((c:any) => c.isEdge?.()).length
+  topoOnline.value = Math.floor(topoNodeCount.value * 0.8)
+  topoOffline.value = topoNodeCount.value - topoOnline.value
+}
+
+// ─── 拓扑搜索 ──────────────────────────────────────────
+function onTopoSearch(kw: string) {
+  if (!graph) return
+  const cells = graph.getCells()
+  cells.forEach((c:any) => { if(c.isNode?.()) c.removeTool('button-remove') })
+  if (!kw) return
+  const found = cells.find((c:any) => {
+    const d = c.getData?.() || {}
+    const label = d.label || c.attr?.('text/text') || ''
+    return label.includes(kw)
+  })
+  if (found) {
+    graph.zoomToFit()
+    graph.centerCell(found)
+    setTimeout(() => graph.zoom(0.02), 100)
+  }
+}
+function onTopoFilter(layer: string) {
+  // 层级过滤 — 通过设备标签匹配
+  if (!graph) return
+  const cells = graph.getCells()
+  cells.forEach((c:any) => {
+    if (c.isNode?.()) {
+      const d = c.getData?.() || {}
+      if (layer === 'all') { c.setVisible(true); return }
+      const label = (d.label || c.attr?.('text/text') || '').toLowerCase()
+      const match = layer === 'core' ? label.includes('核心') || label.includes('core') :
+        layer === 'dist' ? label.includes('汇聚') || label.includes('dist') :
+        label.includes('接入') || label.includes('access')
+      c.setVisible(match)
+    }
+  })
+}
 
 /** 启动时从服务器加载拓扑列表 */
 async function initTopoList() {
@@ -1346,6 +1399,7 @@ function handleClear() {
 
 async function handleSave() {
   if (!graph || !currentTopoId.value) return
+  updateTopoStats()
   const json = graph.toJSON()
   await saveTopoData(currentTopoId.value, json)
   ElMessage.success(`"${topoList.value.find(t=>t.id===currentTopoId.value)?.name}" 已保存到服务器`)

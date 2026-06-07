@@ -199,8 +199,17 @@ function addStream(d: Dev, f: Iface) {
   // DOM 渲染 → 等 200ms 确保 CSS Grid 布局完成 → init
   nextTick(() => setTimeout(() => initChart(stream), 200))
 
+  // 注册设备到后台采集器（后端自治轮询，前端只被动读）
+  registerWithCollector(d, f)
+
   // 立即采集，采集完自己调度下一次（递归 setTimeout，不怕后台冻结）
   scheduleNext(stream)
+}
+
+async function registerWithCollector(d: Dev, f: Iface) {
+  try {
+    await fetch(`/api/ros/traffic/collector/register?device_id=${encodeURIComponent(d.id)}&host=${encodeURIComponent(d.host)}&interfaces=${f.index}`)
+  } catch { /* 静默失败，采集器可能未启动 */ }
 }
 
 function scheduleNext(stream: Stream) {
@@ -240,30 +249,47 @@ function onVisibilityChange() {
   }
 }
 
-/* ── 轮询快照 ── */
+/* ── 轮询快照（优先读采集器缓存，后端自治轮询不受前端 Tab 状态影响）── */
 async function pollSnapshot(stream: Stream) {
   const d = stream.dev; const f = stream.iface
   if (!d || !f) return
   try {
-    const url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
-    // 5 秒超时，避免后台标签页卡住长时间无响应
+    // 优先从后台采集器读取缓存（后端自驱，图表永不停）
+    let url = `/api/ros/traffic/collector/snapshot?device_id=${encodeURIComponent(d.id)}`
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 5000)
     const r = await fetch(url, { signal: ctrl.signal })
     clearTimeout(timer)
     if (!r.ok) { stream.errors++; return }
-    const pt = await r.json()
-    if (pt.rx_mbps !== undefined) {
-      stream.errors = 0  // 成功后重置
-      stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
-      stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
-      if (stream.points.length > MAX_POINTS) {
-        stream.points = stream.points.slice(-MAX_POINTS)
-      }
-      updateChart(stream)
+
+    const snap = await r.json()
+    if (!snap.ok) {
+      // 采集器无数据 → 回退到直接 SNMP
+      url = `/api/ros/traffic/snapshot?host=${encodeURIComponent(d.host)}&if_index=${f.index}`
+      const r2 = await fetch(url)
+      const pt = await r2.json()
+      pushPoint(stream, pt)
+      return
     }
+
+    // 从采集器缓存读取
+    const data = snap.data || {}
+    const pt = data[f.index + ''] || data[String(f.index)]
+    if (pt) pushPoint(stream, pt)
   } catch {
     stream.errors++
+  }
+}
+
+function pushPoint(stream: Stream, pt: any) {
+  if (pt.rx_mbps !== undefined) {
+    stream.errors = 0
+    stream.rx = pt.rx_mbps; stream.tx = pt.tx_mbps
+    stream.points.push({ ts: pt.ts, rx: pt.rx_mbps, tx: pt.tx_mbps })
+    if (stream.points.length > MAX_POINTS) {
+      stream.points = stream.points.slice(-MAX_POINTS)
+    }
+    updateChart(stream)
   }
 }
 

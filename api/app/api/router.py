@@ -5,6 +5,8 @@ from app.api import generate, manual, network_tools, tools_extra, tools_subnet, 
 from app.api import collaboration, config_audit, lldp_discovery, report, ssh_terminal
 from app.api import ssh_devices
 from app.api import ros_rest, ros_mndp, ros_snmp_monitor
+from app.api import ipam, config_backup, health_check, scheduler, alert_webhook, bigscreen
+from app.api import security_baseline, rack, switch_protect, snmp_template
 from app.api.diagnostics import dns as diag_dns
 from app.api.diagnostics import tcp_port as diag_tcp
 from app.api.diagnostics import http_check as diag_http
@@ -31,6 +33,16 @@ api_router.include_router(manual.router, tags=["manual"])
 api_router.include_router(ros_rest.router, tags=["ros"])
 api_router.include_router(ros_mndp.router, tags=["ros"])
 api_router.include_router(ros_snmp_monitor.router, tags=["ros"])
+api_router.include_router(ipam.router, tags=["ipam"])
+api_router.include_router(config_backup.router, tags=["backup"])
+api_router.include_router(health_check.router, tags=["health"])
+api_router.include_router(scheduler.router, tags=["scheduler"])
+api_router.include_router(alert_webhook.router, tags=["alert"])
+api_router.include_router(bigscreen.router, tags=["bigscreen"])
+api_router.include_router(security_baseline.router, tags=["security"])
+api_router.include_router(rack.router, tags=["rack"])
+api_router.include_router(switch_protect.router, tags=["switch-protect"])
+api_router.include_router(snmp_template.router, tags=["snmp-template"])
 api_router.include_router(collaboration.router, tags=["collab"])
 api_router.include_router(config_audit.router, tags=["audit"])
 api_router.include_router(lldp_discovery.router, tags=["lldp"])

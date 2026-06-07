@@ -9,6 +9,66 @@ const router = createRouter({
       component: () => import('@/views/Home.vue'),
     },
     {
+      path: '/dashboard',
+      name: 'Dashboard',
+      component: () => import('@/views/Dashboard.vue'),
+    },
+    {
+      path: '/ipam',
+      name: 'Ipam',
+      component: () => import('@/views/Ipam.vue'),
+    },
+    {
+      path: '/batch',
+      name: 'BatchCmd',
+      component: () => import('@/views/BatchCmd.vue'),
+    },
+    {
+      path: '/backup',
+      name: 'Backup',
+      component: () => import('@/views/Backup.vue'),
+    },
+    {
+      path: '/health',
+      name: 'Health',
+      component: () => import('@/views/Health.vue'),
+    },
+    {
+      path: '/scheduler',
+      name: 'Scheduler',
+      component: () => import('@/views/Scheduler.vue'),
+    },
+    {
+      path: '/alert',
+      name: 'Alert',
+      component: () => import('@/views/Alert.vue'),
+    },
+    {
+      path: '/bigscreen',
+      name: 'BigScreen',
+      component: () => import('@/views/BigScreen.vue'),
+    },
+    {
+      path: '/security',
+      name: 'Security',
+      component: () => import('@/views/Security.vue'),
+    },
+    {
+      path: '/rack',
+      name: 'Rack',
+      component: () => import('@/views/Rack.vue'),
+    },
+    {
+      path: '/switch-protect',
+      name: 'SwitchProtect',
+      component: () => import('@/views/SwitchProtect.vue'),
+    },
+    {
+      path: '/snmp-template',
+      name: 'SnmpTemplate',
+      component: () => import('@/views/SnmpTemplate.vue'),
+    },
+    {
       path: '/generate',
       name: 'Generator',
       component: () => import('@/views/Generator.vue'),
