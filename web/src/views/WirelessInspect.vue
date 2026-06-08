@@ -63,6 +63,8 @@
             <span class="ap-chip-sig">{{ n.signal }}%</span>
           </div>
         </div>
+        <!-- 信道分布图 -->
+        <div ref="channelChartRef" class="channel-chart" v-if="wifi.networks.length"></div>
       </div>
 
       <!-- 事件日志 -->
@@ -203,8 +205,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import * as echarts from 'echarts'
 
 /* ── 本机 WiFi（页面加载自动获取） ── */
 const wifi = reactive({
@@ -216,6 +219,9 @@ const wifi = reactive({
 })
 let _wifiTimer: ReturnType<typeof setInterval>|null = null
 
+const channelChartRef = ref<HTMLElement|null>(null)
+let channelChart: echarts.ECharts|null = null
+
 async function getWifiBatch() {
   wifi.ld = true; wifi.er = false; wifi.status = null; wifi.networks = []
   try {
@@ -223,8 +229,56 @@ async function getWifiBatch() {
     const d = await r.json()
     if (d.detail) { wifi.er = true; return }  // 非 Windows
     wifi.status = d; wifi.networks = d.networks || []
+    await nextTick()
+    renderChannelChart()
   } catch { wifi.er = true }
   finally { wifi.ld = false }
+}
+
+function renderChannelChart() {
+  if (!channelChartRef.value || !wifi.networks.length) return
+  // 按信道统计 AP 数量
+  const chanMap: Record<number, number> = {}
+  wifi.networks.forEach(n => {
+    if (n.channel > 0) chanMap[n.channel] = (chanMap[n.channel] || 0) + 1
+  })
+  const ch24: number[] = [], ch50: number[] = [], labels24: string[] = [], labels50: string[] = []
+  Object.entries(chanMap).sort((a,b) => parseInt(a[0])-parseInt(b[0])).forEach(([ch, cnt]) => {
+    const c = parseInt(ch)
+    if (c <= 14) { labels24.push(`CH${c}`); ch24.push(cnt) }
+    else { labels50.push(`CH${c}`); ch50.push(cnt) }
+  })
+
+  if (!channelChart) channelChart = echarts.init(channelChartRef.value)
+  // 双图：2.4G 上 + 5G 下
+  const grid24 = { top: 8, right: 12, bottom: 4, left: 40, height: '38%' }
+  const grid50 = { top: '56%', right: 12, bottom: 24, left: 40, height: '38%' }
+
+  const x24 = labels24.length ? {
+    type: 'category' as const, data: labels24, axisLabel: { fontSize: 9, color: '#94a3b8' }, axisTick: { show: false },
+  } : { show: false as const }
+  const x50 = labels50.length ? {
+    type: 'category' as const, data: labels50, axisLabel: { fontSize: 9, color: '#6366f1' }, axisTick: { show: false },
+  } : { show: false as const }
+
+  channelChart.setOption({
+    backgroundColor: 'transparent',
+    title: { text: '📊 信道占用分布', left: 'center', top: 0, textStyle: { fontSize: 12, color: '#64748b', fontWeight: 600 } },
+    grid: [grid24, grid50],
+    xAxis: [
+      { ...x24, gridIndex: 0, position: 'bottom' as const },
+      { ...x50, gridIndex: 1, position: 'bottom' as const },
+    ],
+    yAxis: [
+      { type: 'value' as const, gridIndex: 0, axisLabel: { fontSize: 9, color: '#94a3b8' }, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+      { type: 'value' as const, gridIndex: 1, axisLabel: { fontSize: 9, color: '#94a3b8' }, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+    ],
+    series: [
+      { name: '2.4GHz AP数', type: 'bar', data: ch24, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#f59e0b', borderRadius: [3,3,0,0] }, barWidth: 20 },
+      { name: '5GHz AP数', type: 'bar', data: ch50, xAxisIndex: 1, yAxisIndex: 1, itemStyle: { color: '#6366f1', borderRadius: [3,3,0,0] }, barWidth: 20 },
+    ],
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+  }, true)
 }
 
 async function getWifiEvents() {
@@ -298,7 +352,7 @@ onMounted(async () => {
   getWifiBatch()
   await loadAcDevices()
 })
-onUnmounted(() => { if (_wifiTimer) clearInterval(_wifiTimer) })
+onUnmounted(() => { if (_wifiTimer) clearInterval(_wifiTimer); channelChart?.dispose() })
 </script>
 
 <style scoped>
@@ -316,6 +370,9 @@ h2 { margin: 0 0 14px; font-size: 20px; }
 .ap-chip-ssid { font-weight: 600; color: #1e293b; }
 .ap-chip-ch { font-size: 10px; }
 .ap-chip-sig { font-size: 10px; color: #64748b; }
+
+/* 信道分布图 */
+.channel-chart { width: 100%; height: 220px; margin-top: 10px; }
 
 /* AP 状态点 */
 .ap-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
