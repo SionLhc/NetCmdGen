@@ -264,7 +264,8 @@ function addSnmpStream(d:Dev,f:Iface) {
   const key=makeKey(d,f)
   const s:SnmpStream={key,dev:d,iface:f,rx:0,tx:0,points:[],timer:null,errors:0,chart:null}
   snmpStreams.value.push(s)
-  nextTick(() => setTimeout(() => initChart(s), 200))
+  // 延迟确保 Grid 布局计算完成，容器有实际尺寸
+  nextTick(() => setTimeout(() => initChart(s), 400))
   scheduleSnmp(s)
 }
 function scheduleSnmp(s:SnmpStream) {
@@ -279,8 +280,15 @@ function stopAllSnmp() { snmpStreams.value.forEach(s=>{if(s.timer)clearTimeout(s
 
 /* ── 独立图表 ── */
 function initChart(s:SnmpStream) {
-  const el=document.getElementById('chart-'+s.key);if(!el)return
-  if(s.chart){s.chart.resize();return}
+  const el=document.getElementById('chart-'+s.key)
+  // 容器不存在或尺寸为0 → 跳过，等下一次 updateChart 触发时再试
+  if(!el)return
+  if(el.clientWidth===0||el.clientHeight===0)return
+  if(s.chart){
+    // 复用已有实例，仅 resize
+    try{s.chart.resize()}catch{}
+    return
+  }
   s.chart=echarts.init(el)
 }
 function updateChart(s:SnmpStream) {
