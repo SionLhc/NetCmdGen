@@ -20,26 +20,41 @@ DB_DIR = Path(__file__).parent.parent / "data"
 DB_PATH = DB_DIR / "health.db"
 
 CHECK_TEMPLATES = [
-    {"id": "设备基本信息", "name": "设备基本信息", "desc": "设备型号/版本/运行时间"},
-    {"id": "CPU使用率", "name": "CPU 使用率", "desc": "检查CPU是否超阈值"},
-    {"id": "内存使用率", "name": "内存使用率", "desc": "检查内存使用率"},
-    {"id": "温度状态", "name": "温度", "desc": "检查设备温度"},
-    {"id": "风扇状态", "name": "风扇状态", "desc": "检查风扇运转"},
-    {"id": "电源状态", "name": "电源状态", "desc": "检查电源模块"},
-    {"id": "接口状态", "name": "接口状态", "desc": "关键接口up/down"},
-    {"id": "接口错包", "name": "接口错包", "desc": "检查接口错误计数"},
-    {"id": "VLAN信息", "name": "VLAN 信息", "desc": "VLAN 配置"},
-    {"id": "路由表", "name": "路由表", "desc": "路由条目统计"},
-    {"id": "ARP表", "name": "ARP 表", "desc": "ARP 条目数"},
-    {"id": "MAC地址表", "name": "MAC 地址表", "desc": "MAC 地址学习数"},
-    {"id": "日志告警", "name": "日志告警", "desc": "warning/error 日志"},
-    {"id": "STP状态", "name": "STP 状态", "desc": "生成树端口状态"},
-    {"id": "链路聚合", "name": "链路聚合", "desc": "Eth-Trunk 状态"},
-    {"id": "OSPF状态", "name": "OSPF 邻居", "desc": "OSPF 邻居 Full 状态"},
-    {"id": "VRRP状态", "name": "VRRP 状态", "desc": "VRRP 主备状态"},
-    {"id": "ACL规则", "name": "ACL 规则", "desc": "ACL 规则数量"},
-    {"id": "NTP同步", "name": "NTP 同步", "desc": "时钟同步状态"},
-    {"id": "当前配置", "name": "当前配置", "desc": "运行配置快照"},
+    # ── 硬件状态 ──
+    {"id": "设备基本信息", "name": "设备基本信息", "desc": "设备型号/版本/运行时间", "category": "硬件状态"},
+    {"id": "CPU使用率", "name": "CPU 使用率", "desc": "检查CPU是否超阈值", "category": "硬件状态"},
+    {"id": "内存使用率", "name": "内存使用率", "desc": "检查内存使用率", "category": "硬件状态"},
+    {"id": "温度状态", "name": "温度", "desc": "检查设备温度", "category": "硬件状态"},
+    {"id": "风扇状态", "name": "风扇状态", "desc": "检查风扇运转", "category": "硬件状态"},
+    {"id": "电源状态", "name": "电源状态", "desc": "检查电源模块", "category": "硬件状态"},
+    # ── 接口与网络 ──
+    {"id": "接口状态", "name": "接口状态", "desc": "关键接口up/down", "category": "接口与网络"},
+    {"id": "接口错包", "name": "接口错包", "desc": "检查接口错误计数", "category": "接口与网络"},
+    {"id": "VLAN信息", "name": "VLAN 信息", "desc": "VLAN 配置", "category": "接口与网络"},
+    {"id": "路由表", "name": "路由表", "desc": "路由条目统计", "category": "接口与网络"},
+    {"id": "ARP表", "name": "ARP 表", "desc": "ARP 条目数", "category": "接口与网络"},
+    {"id": "MAC地址表", "name": "MAC 地址表", "desc": "MAC 地址学习数", "category": "接口与网络"},
+    # ── 协议状态 ──
+    {"id": "STP状态", "name": "STP 状态", "desc": "生成树端口状态", "category": "协议状态"},
+    {"id": "链路聚合", "name": "链路聚合", "desc": "Eth-Trunk 状态", "category": "协议状态"},
+    {"id": "OSPF状态", "name": "OSPF 邻居", "desc": "OSPF 邻居 Full 状态", "category": "协议状态"},
+    {"id": "VRRP状态", "name": "VRRP 状态", "desc": "VRRP 主备状态", "category": "协议状态"},
+    # ── 系统信息 ──
+    {"id": "日志告警", "name": "日志告警", "desc": "warning/error 日志", "category": "系统信息"},
+    {"id": "ACL规则", "name": "ACL 规则", "desc": "ACL 规则数量", "category": "系统信息"},
+    {"id": "NTP同步", "name": "NTP 同步", "desc": "时钟同步状态", "category": "系统信息"},
+    {"id": "当前配置", "name": "当前配置", "desc": "运行配置快照", "category": "系统信息"},
+    # ── 安全合规（10项）──
+    {"id": "弱口令检测", "name": "弱口令检测", "desc": "检查是否存在默认密码或弱密码", "category": "安全合规", "severity": "high"},
+    {"id": "Telnet启用", "name": "Telnet 启用", "desc": "检查是否启用了明文 Telnet", "category": "安全合规", "severity": "high"},
+    {"id": "SSH_V1协议", "name": "SSH V1 协议", "desc": "检查是否支持 SSH V1", "category": "安全合规", "severity": "high"},
+    {"id": "SNMP默认团体字", "name": "SNMP 默认团体字", "desc": "检查 public/private 默认团体字", "category": "安全合规", "severity": "medium"},
+    {"id": "HTTP管理", "name": "HTTP 管理", "desc": "是否启用明文 HTTP 管理", "category": "安全合规", "severity": "medium"},
+    {"id": "ACL管理口", "name": "ACL 管理口", "desc": "管理口是否配置了 ACL 保护", "category": "安全合规", "severity": "medium"},
+    {"id": "登录横幅", "name": "登录横幅", "desc": "是否配置登录警告横幅", "category": "安全合规", "severity": "low"},
+    {"id": "会话超时", "name": "会话超时", "desc": "闲置会话超时是否配置", "category": "安全合规", "severity": "low"},
+    {"id": "日志配置", "name": "日志配置", "desc": "Syslog 远程日志是否配置", "category": "安全合规", "severity": "low"},
+    {"id": "NTP配置", "name": "NTP 配置", "desc": "NTP 时间同步是否配置", "category": "安全合规", "severity": "low"},
 ]
 
 

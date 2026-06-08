@@ -90,6 +90,17 @@ def parse_item(item_name: str, output: str) -> dict:
         "ACL规则": _parse_acl,
         "NTP同步": _parse_ntp,
         "当前配置": _parse_raw,
+        # ── 安全合规（10项）──
+        "弱口令检测": _parse_weak_password,
+        "Telnet启用": _parse_telnet,
+        "SSH_V1协议": _parse_ssh_v1,
+        "SNMP默认团体字": _parse_snmp_community,
+        "HTTP管理": _parse_http,
+        "ACL管理口": _parse_acl_mgmt,
+        "登录横幅": _parse_banner,
+        "会话超时": _parse_timeout,
+        "日志配置": _parse_logging,
+        "NTP配置": _parse_ntp_config,
     }
     fn = parsers.get(item_name, _parse_raw)
     result_str, level, message = fn(output)
@@ -591,3 +602,154 @@ def _parse_ntp(output: str) -> tuple[str, str, str]:
     lvl = "warning" if data["status"] == "未同步" else "normal"
     msg = "NTP 时钟未同步" if data["status"] == "未同步" else ""
     return _wrap(data), lvl, msg
+
+
+# ======================== 安全检查解析器 ========================
+
+def _sec_pass(msg: str, data: dict = None) -> tuple[str, str, str]:
+    """安全项通过：合规配置存在或危险配置不存在"""
+    return _wrap(data or {"status": "合规"}), "normal", msg
+
+
+def _sec_fail(msg: str, sev: str, data: dict = None) -> tuple[str, str, str]:
+    """安全项不通过，sev: high/medium/low → level: error/warning/normal"""
+    lvl = "error" if sev == "high" else "warning" if sev == "medium" else "normal"
+    return _wrap(data or {"status": "不合规"}), lvl, msg
+
+
+def _parse_weak_password(output: str) -> tuple[str, str, str]:
+    """检查 local-user 是否使用了弱密码/简单密码"""
+    if not output or not output.strip():
+        return _sec_pass("未配置本地用户或密码信息不可读取")
+    weak_patterns = ["cipher admin", "cipher password", "cipher huawei", "cipher 123",
+                     "simple admin", "simple password", "simple huawei", "simple 123",
+                     "irreversible-cipher", "cipher %@%", "simple %@%"]
+    for p in weak_patterns:
+        if p.lower() in output.lower():
+            return _sec_fail("检测到弱密码或默认密码配置", "high",
+                             {"detail": f"存在疑似弱密码: {p}", "status": "不合规"})
+    return _sec_pass("未发现弱密码特征", {"status": "合规"})
+
+
+def _parse_telnet(output: str) -> tuple[str, str, str]:
+    """检查 Telnet 服务是否启用 — 存在 telnet server enable → 不合规"""
+    if not output or not output.strip():
+        return _sec_pass("Telnet 服务未启用（配置中未找到）", {"status": "合规"})
+    if "telnet server enable" in output.lower() or "telnet server enable" in output:
+        if "undo telnet" in output.lower():
+            return _sec_pass("Telnet 已通过 undo 命令关闭", {"status": "合规"})
+        return _sec_fail("Telnet 服务已启用，存在明文传输风险", "high",
+                         {"detail": output.strip(), "status": "不合规"})
+    return _sec_pass("Telnet 服务未启用", {"status": "合规"})
+
+
+def _parse_ssh_v1(output: str) -> tuple[str, str, str]:
+    """检查 SSH 服务器是否支持 V1 协议"""
+    if not output or not output.strip():
+        return _sec_pass("SSH 服务状态不可读取（可能未启用）", {"status": "合规"})
+    lower = output.lower()
+    if "ssh version 1" in lower or "version 1.0" in lower or "v1" in lower:
+        return _sec_fail("SSH 服务器支持不安全的 V1 协议", "high",
+                         {"detail": output.strip(), "status": "不合规"})
+    return _sec_pass("SSH 协议版本安全", {"status": "合规", "detail": output.strip()[:100]})
+
+
+def _parse_snmp_community(output: str) -> tuple[str, str, str]:
+    """检查 SNMP 团体字是否为默认值 public/private"""
+    if not output or not output.strip():
+        return _sec_pass("未配置 SNMP 团体字", {"status": "合规"})
+    lower = output.lower()
+    dangerous = []
+    for line in output.split("\n"):
+        line_lower = line.strip().lower()
+        if "public" in line_lower or "private" in line_lower:
+            dangerous.append(line.strip()[:80])
+    if dangerous:
+        return _sec_fail(f"SNMP 使用了默认团体字 public/private", "medium",
+                         {"detail": "; ".join(dangerous), "status": "不合规"})
+    return _sec_pass("未发现 SNMP 默认团体字", {"status": "合规"})
+
+
+def _parse_http(output: str) -> tuple[str, str, str]:
+    """检查 HTTP 管理是否启用"""
+    if not output or not output.strip():
+        return _sec_pass("HTTP 管理未启用", {"status": "合规"})
+    lower = output.lower()
+    if "http server enable" in lower or "http secure-server" in lower:
+        if "undo http server enable" in lower or "undo http server" in lower:
+            return _sec_pass("HTTP 管理已通过 undo 命令关闭", {"status": "合规"})
+        if "http secure-server enable" in lower:
+            return _sec_pass("已启用 HTTPS 安全服务", {"status": "合规"})
+        return _sec_fail("HTTP 明文管理已启用，建议改为 HTTPS", "medium",
+                         {"detail": output.strip()[:100], "status": "不合规"})
+    if "http enable" in lower:
+        return _sec_fail("HTTP 服务已启用", "medium",
+                         {"detail": output.strip()[:100], "status": "不合规"})
+    return _sec_pass("HTTP 管理未启用", {"status": "合规"})
+
+
+def _parse_acl_mgmt(output: str) -> tuple[str, str, str]:
+    """检查是否配置了 ACL 规则（管理口保护）"""
+    if not output or not output.strip():
+        return _sec_fail("未配置任何 ACL 规则，管理口缺乏访问控制", "medium",
+                         {"status": "不合规"})
+    rule_count = 0
+    for line in output.split("\n"):
+        if line.strip().startswith("rule") or line.strip().startswith("Rule"):
+            if "permit" in line.lower() or "deny" in line.lower():
+                rule_count += 1
+    if rule_count > 0:
+        return _sec_pass(f"已配置 {rule_count} 条 ACL 规则", {"status": "合规", "count": rule_count})
+    return _sec_fail("ACL 已定义但无有效规则", "medium", {"status": "不合规"})
+
+
+def _parse_banner(output: str) -> tuple[str, str, str]:
+    """检查是否配置了登录横幅（header login/motd）"""
+    if not output or not output.strip():
+        return _sec_fail("未配置登录警告横幅", "low",
+                         {"status": "不合规", "detail": "建议配置 header login 或 header motd"})
+    lower = output.lower()
+    if "header login" in lower or "header motd" in lower or "header shell" in lower:
+        return _sec_pass("已配置登录横幅", {"status": "合规",
+                                             "detail": output.strip().split("\n")[0][:80]})
+    return _sec_fail("未配置登录警告横幅", "low", {"status": "不合规"})
+
+
+def _parse_timeout(output: str) -> tuple[str, str, str]:
+    """检查是否配置了会话超时（idle-timeout）"""
+    if not output or not output.strip():
+        return _sec_fail("未配置会话超时，存在安全风险", "low",
+                         {"status": "不合规", "detail": "建议配置 idle-timeout"})
+    lower = output.lower()
+    if "idle-timeout" in lower or "idle timeout" in lower:
+        return _sec_pass("已配置会话超时", {"status": "合规",
+                                             "detail": output.strip().split("\n")[0][:80]})
+    return _sec_fail("未配置会话超时", "low", {"status": "不合规"})
+
+
+def _parse_logging(output: str) -> tuple[str, str, str]:
+    """检查是否配置了远程日志（info-center / syslog）"""
+    if not output or not output.strip():
+        return _sec_fail("未配置远程日志（Syslog）", "low",
+                         {"status": "不合规", "detail": "建议配置 info-center loghost"})
+    lower = output.lower()
+    if "info-center" in lower or "syslog" in lower:
+        if "info-center enable" in lower or "info-center loghost" in lower:
+            return _sec_pass("已配置远程日志", {"status": "合规",
+                                                 "detail": output.strip().split("\n")[0][:80]})
+        return _sec_pass("检测到日志相关配置", {"status": "合规"})
+    return _sec_fail("未配置远程日志", "low", {"status": "不合规"})
+
+
+def _parse_ntp_config(output: str) -> tuple[str, str, str]:
+    """检查 NTP 时间同步是否配置（安全合规视角）"""
+    if not output or not output.strip():
+        return _sec_fail("NTP 时间同步未配置，日志审计时间不准", "low",
+                         {"status": "不合规", "detail": "建议配置 ntp-service"})
+    lower = output.lower()
+    if "synchronized" in lower or "sync" in lower or "ntp-service server" in lower:
+        return _sec_pass("NTP 时间同步已配置", {"status": "合规",
+                                                 "detail": output.strip().split("\n")[0][:80]})
+    if "status" in lower or "reference" in lower:
+        return _sec_pass("检测到 NTP 相关配置", {"status": "合规"})
+    return _sec_fail("NTP 时间同步未配置", "low", {"status": "不合规"})

@@ -48,20 +48,28 @@
             请先在「设备管理」中添加设备
           </span>
         </div>
-        <!-- 巡检项多选 -->
+        <!-- 巡检项多选（按分类分组） -->
         <div style="margin-bottom:14px">
           <div style="font-size:13px;color:#64748b;margin-bottom:6px;display:flex;align-items:center;gap:12px">
             巡检项
             <el-button link size="small" @click="selectAllChecks">全选</el-button>
             <el-button link size="small" @click="selectDefaultChecks">默认</el-button>
           </div>
-          <el-checkbox-group v-model="inspectChecks" style="display:flex;flex-wrap:wrap;gap:8px">
-            <el-checkbox v-for="t in templates" :key="t.id" :label="t.id" border size="small">
-              <el-tooltip :content="t.command||''" placement="top" :show-after="500">
-                {{ t.name }}
-              </el-tooltip>
-            </el-checkbox>
-          </el-checkbox-group>
+          <div v-for="(items, cat) in groupedTemplates" :key="cat" style="margin-bottom:8px">
+            <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:4px;padding-left:2px">
+              {{ cat }}
+              <el-tag v-if="cat==='安全合规'" type="danger" size="small" effect="plain" style="margin-left:4px;height:18px;line-height:18px;font-size:10px">含高危项</el-tag>
+            </div>
+            <el-checkbox-group v-model="inspectChecks" style="display:flex;flex-wrap:wrap;gap:6px">
+              <el-checkbox v-for="t in items" :key="t.id" :label="t.id" border size="small">
+                <el-tooltip :content="t.desc" placement="top" :show-after="300">
+                  <span :style="{ color: t.severity === 'high' ? '#ef4444' : t.severity === 'medium' ? '#e6a23c' : '' }">
+                    {{ t.name }}
+                  </span>
+                </el-tooltip>
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
         </div>
         <el-button type="primary" @click="runBatch" :loading="inspecting" :disabled="!inspectDevs.length||!inspectChecks.length">
           🚀 执行巡检
@@ -266,6 +274,23 @@ async function delDevice(idx: number) {
 }
 
 /* ── 巡检执行 ── */
+/** 按 category 分组巡检模板 */
+const groupedTemplates = computed(() => {
+  const groups: Record<string, any[]> = {}
+  const order = ['硬件状态', '接口与网络', '协议状态', '系统信息', '安全合规']
+  templates.value.forEach(t => {
+    const cat = t.category || '其他'
+    if (!groups[cat]) groups[cat] = []
+    groups[cat].push(t)
+  })
+  // 按预设顺序排列
+  const sorted: Record<string, any[]> = {}
+  for (const cat of order) { if (groups[cat]) sorted[cat] = groups[cat] }
+  // 兜底：不在预设顺序里的放后面
+  for (const cat of Object.keys(groups)) { if (!sorted[cat]) sorted[cat] = groups[cat] }
+  return sorted
+})
+
 function selectAllChecks() { inspectChecks.value = templates.value.map(t => t.id) }
 function selectDefaultChecks() { inspectChecks.value = [...DEFAULT_CHECKS] }
 

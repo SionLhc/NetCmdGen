@@ -12,7 +12,7 @@ from app.api.inspection_parser import parse_item, is_command_error
 
 logger = logging.getLogger("inspection")
 
-# 华为交换机巡检命令映射（20 项）
+# 华为交换机巡检命令映射（20 项基础 + 10 项安全）add 10 security items
 INSPECTION_COMMANDS = {
     "设备基本信息": "display version",
     "CPU使用率": "display cpu-usage",
@@ -34,6 +34,17 @@ INSPECTION_COMMANDS = {
     "ACL规则": "display acl all",
     "NTP同步": "display ntp-status",
     "当前配置": "display current-configuration",
+    # ── 安全合规检查（10项）──
+    "弱口令检测": "display current-configuration | include local-user",
+    "Telnet启用": "display current-configuration | include telnet server enable",
+    "SSH_V1协议": "display ssh server status",
+    "SNMP默认团体字": "display current-configuration | include snmp-agent community",
+    "HTTP管理": "display current-configuration | include http server",
+    "ACL管理口": "display current-configuration | include acl|rule",
+    "登录横幅": "display current-configuration | include header",
+    "会话超时": "display current-configuration | include idle-timeout",
+    "日志配置": "display current-configuration | include info-center",
+    "NTP配置": "display ntp status || display ntp-service status",
 }
 
 # SNMP 可替代的 8 个巡检项（避免 SSH 命令开销）

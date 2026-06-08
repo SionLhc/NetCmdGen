@@ -54,11 +54,6 @@ const router = createRouter({
       component: () => import('@/views/WirelessInspect.vue'),
     },
     {
-      path: '/security',
-      name: 'Security',
-      component: () => import('@/views/Security.vue'),
-    },
-    {
       path: '/rack',
       name: 'Rack',
       component: () => import('@/views/Rack.vue'),
