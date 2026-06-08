@@ -2,112 +2,142 @@
   <div class="page">
     <h2>📡 无线检测</h2>
 
-    <!-- ── 本机 WiFi 诊断 ── -->
+    <!-- ── 本机 WiFi 诊断（自动加载） ── -->
     <el-card style="margin-bottom:14px">
-      <template #header>💻 本机 WiFi 诊断（Windows netsh/WMI）</template>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <el-button @click="getWifiStatus" :loading="wifi.ld">📶 实时状态</el-button>
-        <el-button @click="getWifiScan" :loading="wifi.ld">🔍 信道扫描</el-button>
-        <span style="font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:4px">
-          日志范围
-          <el-input-number v-model="wifi.minutes" :min="1" :max="1440" size="small" style="width:90px"/>
-          分钟
-        </span>
-        <el-button @click="getWifiEvents" :loading="wifi.ld">📋 事件日志</el-button>
+      <template #header>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>💻 本机 WiFi 诊断</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <el-switch v-model="wifi.auto" size="small" active-text="自动刷新" inactive-text="手动"/>
+            <el-button size="small" @click="getWifiBatch" :loading="wifi.ld">🔄 刷新</el-button>
+            <el-button size="small" @click="getWifiEvents" :loading="wifi.ld">📋 事件日志</el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- 信号卡片 -->
+      <div v-if="wifi.status" class="wifi-cards">
+        <div class="wc">
+          <div class="wc-label">连接状态</div>
+          <div class="wc-val" :style="{color:wifi.status.connected?'#10b981':'#ef4444'}">
+            {{ wifi.status.connected ? '● 已连接' : '○ 未连接' }}
+          </div>
+        </div>
+        <div class="wc">
+          <div class="wc-label">SSID</div>
+          <div class="wc-val">{{ wifi.status.ssid || '--' }}</div>
+        </div>
+        <div class="wc">
+          <div class="wc-label">信号强度</div>
+          <div class="wc-val" :style="{color:wifi.status.signal>60?'#10b981':wifi.status.signal>30?'#e6a23c':'#ef4444'}">
+            {{ wifi.status.signal }}%
+          </div>
+          <el-progress :percentage="wifi.status.signal||0" :stroke-width="6" :show-text="false"
+            :color="(wifi.status.signal||0)>60?'#10b981':(wifi.status.signal||0)>30?'#e6a23c':'#ef4444'"/>
+        </div>
+        <div class="wc">
+          <div class="wc-label">信道</div>
+          <div class="wc-val">{{ wifi.status.channel || '--' }}</div>
+        </div>
+        <div class="wc">
+          <div class="wc-label">协议</div>
+          <div class="wc-val">{{ wifi.status.radio || '--' }}</div>
+        </div>
+        <div class="wc">
+          <div class="wc-label">速率 ▼/▲</div>
+          <div class="wc-val">{{ wifi.status.rx_rate||0 }} / {{ wifi.status.tx_rate||0 }} Mbps</div>
+        </div>
+      </div>
+      <div v-else-if="!wifi.ld" style="text-align:center;padding:16px;color:#94a3b8;font-size:12px">
+        {{ wifi.er ? '⚠ 获取失败（仅支持 Windows）' : '正在获取本机 WiFi 状态...' }}
       </div>
 
-      <!-- WiFi 实时状态 -->
-      <el-descriptions v-if="wifi.status" :column="3" border size="small" style="margin-top:12px">
-        <el-descriptions-item label="状态">
-          <el-tag :type="wifi.status.connected?'success':'danger'">{{ wifi.status.connected?'已连接':'未连接' }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="SSID">{{ wifi.status.ssid||'--' }}</el-descriptions-item>
-        <el-descriptions-item label="BSSID">{{ wifi.status.bssid||'--' }}</el-descriptions-item>
-        <el-descriptions-item label="信号">
-          <el-progress :percentage="wifi.status.signal||0" :stroke-width="16"
-            :color="(wifi.status.signal||0)>60?'#67c23a':(wifi.status.signal||0)>30?'#e6a23c':'#f56c6c'"/>
-        </el-descriptions-item>
-        <el-descriptions-item label="信道">{{ wifi.status.channel||'--' }}</el-descriptions-item>
-        <el-descriptions-item label="无线类型">{{ wifi.status.radio||'--' }}</el-descriptions-item>
-        <el-descriptions-item label="速率">▼{{ wifi.status.rx_rate||0 }}M / ▲{{ wifi.status.tx_rate||0 }}M</el-descriptions-item>
-        <el-descriptions-item label="认证">{{ wifi.status.auth||'--' }}</el-descriptions-item>
-        <el-descriptions-item label="网卡">{{ wifi.status.adapter?.name||'--' }}</el-descriptions-item>
-      </el-descriptions>
+      <!-- 周围 AP 列表 -->
+      <div v-if="wifi.networks.length" style="margin-top:12px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#64748b">🔍 周围 WiFi 网络 ({{ wifi.networks.length }})</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <div v-for="n in wifi.networks.slice(0,20)" :key="n.bssid" class="ap-chip"
+            :style="{borderColor:n.signal>60?'#10b981':n.signal>30?'#e6a23c':'#e2e8f0'}">
+            <span class="ap-chip-ssid">{{ n.ssid }}</span>
+            <span class="ap-chip-ch" :style="{color:n.channel>14?'#6366f1':'#94a3b8'}">CH{{ n.channel }}</span>
+            <span class="ap-chip-sig">{{ n.signal }}%</span>
+          </div>
+        </div>
+      </div>
 
-      <!-- WiFi 信道扫描 -->
-      <el-table v-if="wifi.networks.length" :data="wifi.networks" size="small" border max-height="300" style="margin-top:12px">
-        <el-table-column prop="ssid" label="SSID" width="160"/>
-        <el-table-column prop="bssid" label="BSSID" width="150"/>
-        <el-table-column label="信号" width="120" align="center">
-          <template #default="{row}">
-            <el-progress :percentage="row.signal" :stroke-width="14"
-              :color="row.signal>60?'#67c23a':row.signal>30?'#e6a23c':'#f56c6c'"/>
-          </template>
-        </el-table-column>
-        <el-table-column prop="channel" label="信道" width="60" align="center">
-          <template #default="{row}"><el-tag :type="row.channel>14?'success':''" size="small">{{ row.channel }}</el-tag></template>
-        </el-table-column>
-        <el-table-column prop="radio" label="类型" width="100"/>
-        <el-table-column prop="rate" label="速率" width="90"/>
-      </el-table>
-
-      <!-- WiFi 事件日志 -->
-      <el-table v-if="wifi.events.length" :data="wifi.events" size="small" border max-height="300" style="margin-top:12px">
+      <!-- 事件日志 -->
+      <el-table v-if="wifi.events.length" :data="wifi.events" size="small" border max-height="280" style="margin-top:12px">
         <el-table-column prop="time" label="时间" width="160"/>
-        <el-table-column prop="event_id" label="EventID" width="80" align="center">
+        <el-table-column prop="event_id" label="事件ID" width="80" align="center">
           <template #default="{row}">
             <el-tag :type="row.event_id===10000?'success':row.event_id===10001||row.event_id===10003?'danger':'warning'" size="small">{{ row.event_id }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="级别" width="70" align="center">
-          <template #default="{row}">
-            <span :style="{color:row.level?.includes('Error')?'#f56c6c':row.level?.includes('Warning')?'#e6a23c':'#67c23a'}">{{ row.level||'--' }}</span>
-          </template>
+          <template #default="{row}"><span :style="{color:row.level?.includes('Error')?'#f56c6c':row.level?.includes('Warning')?'#e6a23c':'#67c23a'}">{{ row.level||'--' }}</span></template>
         </el-table-column>
         <el-table-column prop="desc" label="描述" min-width="200"/>
       </el-table>
+
+      <!-- 日志范围设置 -->
+      <div v-if="wifi.events.length" style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:11px;color:#94a3b8">
+        查询范围
+        <el-input-number v-model="wifi.minutes" :min="1" :max="1440" size="small" style="width:80px" controls-position="right"/>
+        分钟
+      </div>
     </el-card>
 
     <!-- ── AC 设备采集 ── -->
     <el-card>
-      <template #header>🏢 AC 设备远程采集（SSH）</template>
-      <el-form :inline="true" size="default">
-        <el-form-item label="AC设备IP">
-          <el-input v-model="devIp" placeholder="192.168.1.1" style="width:150px"/>
-        </el-form-item>
-        <el-form-item label="用户名">
-          <el-input v-model="username" placeholder="admin" style="width:110px"/>
-        </el-form-item>
-        <el-form-item label="密码">
-          <el-input v-model="password" type="password" placeholder="SSH密码" style="width:110px"/>
-        </el-form-item>
-        <el-form-item label="厂商">
-          <el-select v-model="vendor" style="width:100px">
-            <el-option label="华为" value="huawei"/><el-option label="华三" value="h3c"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="采集项">
-          <el-checkbox-group v-model="selectedItems" style="display:flex;flex-wrap:wrap;gap:6px">
-            <el-checkbox v-for="t in inspectItems" :key="t.id" :label="t.id" border size="small">{{ t.name }}</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="runInspect" :loading="inspecting">🔍 开始采集</el-button>
-        </el-form-item>
-      </el-form>
-      <div style="font-size:11px;color:#94a3b8">设备需开启 WLAN 功能并支持 SSH 登录。</div>
+      <template #header>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>🏢 AC 设备远程采集</span>
+          <el-button size="small" @click="showAcForm=!showAcForm">{{ showAcForm?'收起':'展开' }}</el-button>
+        </div>
+      </template>
+
+      <!-- 已保存设备快捷入口 -->
+      <div v-if="acDevices.length" style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#94a3b8">快捷选择:</span>
+        <el-select v-model="selectedAcDevice" placeholder="选择已保存设备" size="small" style="width:240px" @change="onSelectAcDevice" clearable>
+          <el-option v-for="d in acDevices" :key="d.ip" :label="`${d.name} (${d.ip})`" :value="d.ip"/>
+        </el-select>
+        <el-button link size="small" type="primary" @click="$router.push('/health')">管理设备 →</el-button>
+      </div>
+
+      <div v-show="showAcForm || !acDevices.length">
+        <el-form :inline="true" size="small">
+          <el-form-item label="IP"><el-input v-model="devIp" placeholder="192.168.1.1" style="width:140px"/></el-form-item>
+          <el-form-item label="用户名"><el-input v-model="username" placeholder="admin" style="width:100px"/></el-form-item>
+          <el-form-item label="密码"><el-input v-model="password" type="password" placeholder="SSH密码" style="width:100px"/></el-form-item>
+          <el-form-item label="厂商">
+            <el-select v-model="vendor" style="width:90px">
+              <el-option label="华为" value="huawei"/><el-option label="华三" value="h3c"/>
+            </el-select>
+          </el-form-item>
+          <el-form-item label="采集项">
+            <el-checkbox-group v-model="selectedItems" size="small">
+              <el-checkbox v-for="t in inspectItems" :key="t.id" :label="t.id" border>{{ t.name }}</el-checkbox>
+            </el-checkbox-group>
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="runInspect" :loading="inspecting">🔍 开始采集</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
     </el-card>
 
-    <!-- AC 采集结果 -->
-    <el-alert v-if="inspecting" type="info" title="采集进行中..." :closable="false" show-icon style="margin:12px 0"/>
+    <!-- AC 采集进度 -->
+    <el-alert v-if="inspecting" type="info" :closable="false" show-icon style="margin:12px 0">
+      <template #title>采集进行中... {{ inspectProgress }}</template>
+    </el-alert>
     <el-alert v-if="inspectResult && !inspecting" :type="inspectResult.errors?'warning':'success'" :closable="false" show-icon style="margin:12px 0">
       <template #title>采集完成 · {{ inspectResult.elapsed_ms }}ms · <span v-if="inspectResult.errors" style="color:#f56c6c">{{ inspectResult.errors }} 项失败</span></template>
     </el-alert>
 
+    <!-- AC 采集结果 -->
     <el-card v-if="apData.length" style="margin-bottom:14px">
-      <template #header>
-        📻 AP 设备列表 · {{ apData.length }} 台（<span style="color:#67c23a">在线 {{ apOnline }}</span> / <span style="color:#f56c6c">离线 {{ apData.length-apOnline }}</span>）
-      </template>
+      <template #header>📻 AP 设备列表 · {{ apData.length }} 台（<span style="color:#67c23a">在线 {{ apOnline }}</span> / <span style="color:#f56c6c">离线 {{ apData.length-apOnline }}</span>）</template>
       <el-table :data="apData" size="small" border>
         <el-table-column prop="ap_id" label="ID" width="50" align="center"/>
         <el-table-column prop="name" label="名称" width="140"/>
@@ -173,38 +203,58 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
-/* ── 本机 WiFi ── */
+/* ── 本机 WiFi（页面加载自动获取） ── */
 const wifi = reactive({
-  ld: false,
+  ld: false, er: false, auto: false,
   status: null as any,
   networks: [] as any[],
   events: [] as any[],
   minutes: 30,
 })
+let _wifiTimer: ReturnType<typeof setInterval>|null = null
 
-/** 批量获取：一次 netsh && 拿到状态 + AP 列表，减少 HTTP 往返 */
-async function getWifiStatus() {
-  wifi.ld = true; wifi.status = null
+async function getWifiBatch() {
+  wifi.ld = true; wifi.er = false; wifi.status = null; wifi.networks = []
   try {
     const r = await fetch('/api/tools/wifi/batch')
     const d = await r.json()
-    wifi.status = d
-    wifi.networks = d.networks || []
-  } catch { } finally { wifi.ld = false }
-}
-/** 单独扫描（更详细） */
-async function getWifiScan() {
-  wifi.ld = true; wifi.networks = []
-  try { const r = await fetch('/api/tools/wifi/networks'); wifi.networks = await r.json() } catch {}
+    if (d.detail) { wifi.er = true; return }  // 非 Windows
+    wifi.status = d; wifi.networks = d.networks || []
+  } catch { wifi.er = true }
   finally { wifi.ld = false }
 }
+
 async function getWifiEvents() {
   wifi.ld = true; wifi.events = []
   try { const r = await fetch(`/api/tools/wifi/events?minutes=${wifi.minutes}`); wifi.events = await r.json() } catch {}
   finally { wifi.ld = false }
+}
+
+watch(() => wifi.auto, (v) => {
+  if (v) { getWifiBatch(); _wifiTimer = setInterval(getWifiBatch, 10000) }
+  else { if (_wifiTimer) { clearInterval(_wifiTimer); _wifiTimer = null } }
+})
+
+/* ── AC 设备管理 ── */
+const acDevices = ref<any[]>([])
+const selectedAcDevice = ref('')
+const showAcForm = ref(true)
+
+async function loadAcDevices() {
+  try { const r = await fetch('/api/health/devices'); acDevices.value = await r.json() } catch {}
+}
+function onSelectAcDevice(ip: string) {
+  if (!ip) return
+  const d = acDevices.value.find(x => x.ip === ip)
+  if (d) {
+    devIp.value = d.ip
+    username.value = d.username || 'admin'
+    password.value = d.password || ''
+    showAcForm.value = false
+  }
 }
 
 /* ── AC 采集 ── */
@@ -213,10 +263,9 @@ const inspectItems = ref([
   { id: 'client_list', name: '客户端' }, { id: 'ssid_list', name: 'SSID' },
   { id: 'radio_util', name: '信道利用率' },
 ])
-
 const devIp = ref(''), username = ref('admin'), password = ref(''), vendor = ref('huawei')
-const selectedItems = ref(['ap_list', 'ap_radio', 'client_list', 'ssid_list', 'radio_util'])
-const inspecting = ref(false), inspectResult = ref<any>(null)
+const selectedItems = ref(['ap_list','ap_radio','client_list','ssid_list','radio_util'])
+const inspecting = ref(false), inspectResult = ref<any>(null), inspectProgress = ref('')
 
 const apData = computed(() => inspectResult.value?.results?.ap_list?.data || [])
 const apOnline = computed(() => apData.value.filter((a:any)=>a.status==='online').length)
@@ -230,21 +279,45 @@ async function runInspect() {
   if (!username.value) { ElMessage.warning('请输入用户名'); return }
   if (!password.value) { ElMessage.warning('请输入密码'); return }
   if (!selectedItems.value.length) { ElMessage.warning('请勾选采集项'); return }
+
   inspecting.value = true; inspectResult.value = null
+  inspectProgress.value = `连接 ${devIp.value}...`
   try {
     const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 120000)
+    inspectProgress.value = '执行命令中...'
     const r = await fetch(`/api/wireless/inspect?device_ip=${encodeURIComponent(devIp.value)}&device_port=22&username=${encodeURIComponent(username.value)}&password=${encodeURIComponent(password.value)}&vendor=${vendor.value}&items=${selectedItems.value.join(',')}`, { method: 'POST', signal: ctrl.signal })
     if (!r.ok) { ElMessage.error(`失败: HTTP ${r.status}`); return }
+    inspectProgress.value = '解析结果...'
     const data = await r.json(); inspectResult.value = data
     ElMessage[data.errors?'warning':'success'](data.errors ? `完成，${data.errors} 项失败` : '采集完成')
   } catch (e: any) { ElMessage.error(e.name==='AbortError'?'超时(2分钟)':`失败: ${e.message}`) }
-  finally { inspecting.value = false }
+  finally { inspecting.value = false; inspectProgress.value = '' }
 }
+
+onMounted(async () => {
+  getWifiBatch()
+  await loadAcDevices()
+})
+onUnmounted(() => { if (_wifiTimer) clearInterval(_wifiTimer) })
 </script>
 
 <style scoped>
 .page { padding: 24px; max-width: 1400px; margin: 0 auto; }
 h2 { margin: 0 0 14px; font-size: 20px; }
+
+/* WiFi 卡片 */
+.wifi-cards { display: grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 10px; }
+.wc { background: #f8fafc; border-radius: 8px; padding: 10px 14px; }
+.wc-label { font-size: 10px; color: #94a3b8; margin-bottom: 4px; }
+.wc-val { font-size: 15px; font-weight: 700; color: #1e293b; }
+
+/* AP chip */
+.ap-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; border: 1.5px solid #e2e8f0; background: #fff; font-size: 11px; }
+.ap-chip-ssid { font-weight: 600; color: #1e293b; }
+.ap-chip-ch { font-size: 10px; }
+.ap-chip-sig { font-size: 10px; color: #64748b; }
+
+/* AP 状态点 */
 .ap-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .ap-dot.online { background: #10b981; } .ap-dot.offline { background: #ef4444; }
 </style>
