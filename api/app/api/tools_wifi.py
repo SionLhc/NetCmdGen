@@ -290,3 +290,97 @@ def wifi_events(minutes: int = Query(default=30, ge=1, le=1440)):
         events.append(current)
 
     return events
+
+
+# ── 优化：批量采集端点 — 一次请求获取全部数据 ──
+
+@router.get("/wifi/batch")
+def wifi_batch():
+    """一次获取状态+网络列表+网卡信息（减少前端 HTTP 往返）"""
+    if platform.system() != "Windows":
+        raise HTTPException(400, "仅支持 Windows")
+
+    # netsh 支持用 && 串联命令，一次 subprocess 调用
+    cmd = 'netsh wlan show interfaces && netsh wlan show networks mode=bssid'
+    output = _run_cmd(cmd, timeout=12)
+
+    # 按分隔符拆成两部分
+    parts = output.split("Interface name")
+    iface_output = ""
+    networks_output = ""
+
+    if len(parts) >= 2:
+        # 第二部分是 interfaces 输出
+        iface_output = "Interface name" + parts[1]
+
+    # 找 networks 输出起始
+    net_start = output.find("SSID 1")
+    if net_start > 0:
+        networks_output = output[net_start:]
+
+    # 解析状态
+    fields = {}
+    for line in iface_output.split("\n"):
+        line = line.strip()
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip().lower(); val = val.strip()
+            if "signal" in key or "信号" in key:
+                m = re.search(r"(\d+)", val)
+                fields["signal"] = int(m.group(1)) * 2 if m else 0
+            elif "channel" in key or "信道" in key:
+                m = re.search(r"(\d+)", val)
+                fields["channel"] = int(m.group(1)) if m else 0
+            elif "radio type" in key or "无线电" in key:
+                fields["radio"] = val
+            elif "ssid" in key.lower():
+                fields["ssid"] = val
+            elif "bssid" in key.lower():
+                fields["bssid"] = val
+            elif "state" in key or "状态" in key:
+                fields["state"] = val
+            elif "receive" in key or "接收" in key:
+                m = re.search(r"(\d+)", val)
+                fields["rx_rate"] = int(m.group(1)) if m else 0
+            elif "transmit" in key or "发送" in key:
+                m = re.search(r"(\d+)", val)
+                fields["tx_rate"] = int(m.group(1)) if m else 0
+
+    # 解析网络列表
+    networks = _parse_bssid_list(networks_output)
+
+    return {
+        "connected": "connected" in fields.get("state", "").lower() or "已连接" in fields.get("state", ""),
+        "ssid": fields.get("ssid", ""),
+        "bssid": fields.get("bssid", ""),
+        "signal": fields.get("signal", 0),
+        "channel": fields.get("channel", 0),
+        "radio": fields.get("radio", ""),
+        "rx_rate": fields.get("rx_rate", 0),
+        "tx_rate": fields.get("tx_rate", 0),
+        "networks": networks,
+    }
+
+
+def _parse_bssid_list(output: str) -> list:
+    """从 netsh bssid 输出中提取 AP 列表"""
+    networks = []
+    pattern = re.compile(
+        r"SSID\s+\d+\s*:\s*(?P<ssid>.*?)\n"
+        r".*?BSSID\s+\d+\s*:\s*(?P<bssid>[0-9a-fA-F:]{17})"
+        r"[\s\S]*?Signal\s*:\s*(?P<signal>\d+)%"
+        r"[\s\S]*?Channel\s*:\s*(?P<channel>\d+)"
+        r"[\s\S]*?Radio\s+type\s*:\s*(?P<radio>[^\n]*)"
+        r"[\s\S]*?Receive\s+rate\s*:\s*(?P<rate>[^\n]*)",
+        re.IGNORECASE,
+    )
+    for m in pattern.finditer(output):
+        networks.append({
+            "ssid": m.group("ssid").strip(),
+            "bssid": m.group("bssid").strip(),
+            "signal": int(m.group("signal")) if m.group("signal") else 0,
+            "channel": int(m.group("channel")) if m.group("channel") else 0,
+            "radio": m.group("radio").strip() if m.group("radio") else "",
+            "rate": m.group("rate").strip() if m.group("rate") else "",
+        })
+    return networks

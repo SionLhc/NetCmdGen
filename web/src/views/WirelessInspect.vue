@@ -185,11 +185,17 @@ const wifi = reactive({
   minutes: 30,
 })
 
+/** 批量获取：一次 netsh && 拿到状态 + AP 列表，减少 HTTP 往返 */
 async function getWifiStatus() {
   wifi.ld = true; wifi.status = null
-  try { const r = await fetch('/api/tools/wifi/status'); wifi.status = await r.json() } catch {}
-  finally { wifi.ld = false }
+  try {
+    const r = await fetch('/api/tools/wifi/batch')
+    const d = await r.json()
+    wifi.status = d
+    wifi.networks = d.networks || []
+  } catch { } finally { wifi.ld = false }
 }
+/** 单独扫描（更详细） */
 async function getWifiScan() {
   wifi.ld = true; wifi.networks = []
   try { const r = await fetch('/api/tools/wifi/networks'); wifi.networks = await r.json() } catch {}
