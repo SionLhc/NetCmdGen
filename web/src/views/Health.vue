@@ -11,25 +11,36 @@
 
     <!-- ── Tab1: 设备管理 ── -->
     <div v-show="activeTab==='devices'">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-size:13px;color:#64748b">已添加 {{ devices.length }} 台设备</span>
-        <el-button type="primary" size="small" @click="openDevForm()">+ 添加设备</el-button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <span style="font-size:13px;color:#64748b">已添加 </span>
+          <strong style="font-size:16px;color:#1e293b">{{ devices.length }}</strong>
+          <span style="font-size:13px;color:#64748b"> 台设备</span>
+        </div>
+        <el-button type="primary" @click="openDevForm()">+ 添加设备</el-button>
       </div>
-      <el-table :data="devices" size="small" border v-loading="loadingDevs" empty-text="暂无设备，请添加交换机/路由器" style="width:100%">
-        <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip/>
-        <el-table-column prop="ip" label="IP 地址" width="150" align="center"/>
-        <el-table-column prop="username" label="用户名" width="90" align="center"/>
-        <el-table-column label="凭据" width="70" align="center">
-          <template #default><span style="color:#94a3b8;font-size:11px">****</span></template>
-        </el-table-column>
-        <el-table-column prop="port" label="端口" width="65" align="center"/>
-        <el-table-column label="操作" width="110" align="center" fixed="right">
-          <template #default="{row,$index}">
-            <el-button type="primary" link size="small" @click="openDevForm(row)">编辑</el-button>
-            <el-button type="danger" link size="small" @click="delDevice($index)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+
+      <!-- 设备卡片网格 -->
+      <div v-loading="loadingDevs" style="min-height:80px">
+        <div v-if="!devices.length && !loadingDevs" style="text-align:center;padding:80px 0;color:#94a3b8">
+          <div style="font-size:48px;margin-bottom:12px">🔌</div>
+          <div style="font-size:14px">暂无设备，请点击上方按钮添加交换机或路由器</div>
+        </div>
+        <div v-else class="device-grid">
+          <div v-for="(d, i) in devices" :key="d.ip" class="device-card">
+            <div class="dc-icon">{{ d.name.toLowerCase().includes('sw') || d.name.includes('交换') ? '🔀' : '🌐' }}</div>
+            <div class="dc-body">
+              <div class="dc-name">{{ d.name }}</div>
+              <div class="dc-ip">{{ d.ip }}<span class="dc-port">:{{ d.port }}</span></div>
+              <div class="dc-user">👤 {{ d.username }}</div>
+            </div>
+            <div class="dc-actions">
+              <el-button :icon="Edit" circle size="small" @click="openDevForm(d)" title="编辑"/>
+              <el-button :icon="Delete" circle size="small" type="danger" @click="delDevice(i)" title="删除"/>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ── Tab2: 执行巡检 ── -->
@@ -107,7 +118,6 @@
             </el-tag>
             <span style="font-size:11px;color:#94a3b8;margin-left:auto">{{ devResult.elapsed_ms }}ms</span>
           </div>
-          <!-- 巡检项明细表 -->
           <el-table :data="devResult.checks" size="small" style="width:100%" :show-header="true">
             <el-table-column prop="item_name" label="巡检项" width="140"/>
             <el-table-column label="状态" width="90" align="center">
@@ -165,9 +175,9 @@
           <template #default="{row}">{{ row.report?.elapsed_ms || '-' }}ms</template>
         </el-table-column>
         <el-table-column prop="created_at" label="时间" width="160"/>
-        <el-table-column label="操作" width="80" align="center">
+        <el-table-column label="操作" width="60" align="center">
           <template #default="{row,$index}">
-            <el-button type="danger" link size="small" @click="delReport(row.id,$index)">删除</el-button>
+            <el-button :icon="Delete" circle size="small" type="danger" @click="delReport(row.id,$index)" title="删除"/>
           </template>
         </el-table-column>
       </el-table>
@@ -193,87 +203,34 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Edit, Delete } from '@element-plus/icons-vue'
 import { useRequest } from '@/composables/useRequest'
 
 const { loading, get, post } = useRequest()
 
-/* ── 状态 ── */
 const activeTab = ref('devices')
 const devices = ref<any[]>([])
 const loadingDevs = ref(false)
 const templates = ref<any[]>([])
 const reports = ref<any[]>([])
 const loadingList = ref(false)
-
-// 巡检执行
-const inspectDevs = ref<string[]>([])      // 选中设备 IP
-const inspectChecks = ref<string[]>([])     // 选中巡检项
+const inspectDevs = ref<string[]>([])
+const inspectChecks = ref<string[]>([])
 const inspecting = ref(false)
 const inspectProgress = ref(0)
 const batchResults = ref<any[]>([])
 const totalElapsed = ref(0)
-
-// 设备表单
 const showDevDialog = ref(false)
 const editIdx = ref(-1)
 const devForm = reactive({ name: '', ip: '', port: 22, username: 'admin', password: '' })
 const savingDev = ref(false)
-
-// 默认巡检项
 const DEFAULT_CHECKS = ['CPU使用率', '内存使用率', '温度状态', '风扇状态', '电源状态', '接口状态']
 const batchStats = computed(() => {
   let passed = 0, warning = 0, failed = 0
-  batchResults.value.forEach(r => {
-    passed += r.passed || 0
-    warning += r.warning || 0
-    failed += r.failed || 0
-  })
+  batchResults.value.forEach(r => { passed += r.passed || 0; warning += r.warning || 0; failed += r.failed || 0 })
   return { passed, warning, failed }
 })
 
-/* ── 设备管理 ── */
-async function loadDevices() {
-  loadingDevs.value = true
-  try {
-    const data = await get<any[]>('/api/health/devices')
-    if (data) devices.value = data
-  } finally { loadingDevs.value = false }
-}
-
-function openDevForm(row?: any) {
-  if (row) {
-    editIdx.value = devices.value.indexOf(row)
-    Object.assign(devForm, row)
-  } else {
-    editIdx.value = -1
-    Object.assign(devForm, { name: '', ip: '', port: 22, username: 'admin', password: '' })
-  }
-  showDevDialog.value = true
-}
-
-async function saveDevice() {
-  if (!devForm.ip) { ElMessage.warning('请输入 IP'); return }
-  if (!devForm.username) { ElMessage.warning('请输入用户名'); return }
-  savingDev.value = true
-  const data = await post<any>('/api/health/devices',
-    { ...devForm },
-    { successMsg: '保存成功' }
-  )
-  savingDev.value = false
-  if (data) {
-    showDevDialog.value = false
-    await loadDevices()
-  }
-}
-
-async function delDevice(idx: number) {
-  const ip = devices.value[idx].ip
-  await ElMessageBox.confirm(`确认删除设备 ${devices.value[idx].name || ip}？`, '确认删除', { type: 'warning' })
-  const ok = await post('/api/health/devices/delete', { ip }, { successMsg: '已删除' })
-  if (ok) await loadDevices()
-}
-
-/* ── 巡检执行 ── */
 /** 按 category 分组巡检模板 */
 const groupedTemplates = computed(() => {
   const groups: Record<string, any[]> = {}
@@ -283,10 +240,8 @@ const groupedTemplates = computed(() => {
     if (!groups[cat]) groups[cat] = []
     groups[cat].push(t)
   })
-  // 按预设顺序排列
   const sorted: Record<string, any[]> = {}
   for (const cat of order) { if (groups[cat]) sorted[cat] = groups[cat] }
-  // 兜底：不在预设顺序里的放后面
   for (const cat of Object.keys(groups)) { if (!sorted[cat]) sorted[cat] = groups[cat] }
   return sorted
 })
@@ -297,39 +252,59 @@ function selectDefaultChecks() { inspectChecks.value = [...DEFAULT_CHECKS] }
 async function runBatch() {
   if (!inspectDevs.value.length || !inspectChecks.value.length) return
   inspecting.value = true; inspectProgress.value = 0; batchResults.value = []
-
   const selectedDevices = devices.value.filter(d => inspectDevs.value.includes(d.ip))
   const checks = inspectChecks.value.join(',')
   const t0 = performance.now()
-
   for (let i = 0; i < selectedDevices.length; i++) {
     const d = selectedDevices[i]
     const data = await post<any>(
       `/api/health/run?device_id=${encodeURIComponent(d.ip)}&device_name=${encodeURIComponent(d.name||d.ip)}&device_ip=${encodeURIComponent(d.ip)}&device_port=${d.port}&username=${encodeURIComponent(d.username)}&password=${encodeURIComponent(d.password)}&checks=${checks}`,
-      undefined,
-      { timeout: 120 }
+      undefined, { timeout: 120 }
     )
     if (data) batchResults.value.push(data)
     inspectProgress.value = Math.round(((i + 1) / selectedDevices.length) * 100)
-    // 批次间休息 1 秒，避免 SSH 连接风暴
     if (i < selectedDevices.length - 1) await new Promise(r => setTimeout(r, 1000))
   }
   totalElapsed.value = Math.round((performance.now() - t0) / 1000)
   inspecting.value = false
-
   if (batchResults.value.length) ElMessage.success(`巡检完成: ${batchResults.value.length} 台设备`)
-
-  // 刷新报告列表
   loadReports()
+}
+
+/* ── 设备管理 ── */
+async function loadDevices() {
+  loadingDevs.value = true
+  try { const data = await get<any[]>('/api/health/devices'); if (data) devices.value = data }
+  finally { loadingDevs.value = false }
+}
+
+function openDevForm(row?: any) {
+  if (row) { editIdx.value = devices.value.indexOf(row); Object.assign(devForm, row) }
+  else { editIdx.value = -1; Object.assign(devForm, { name: '', ip: '', port: 22, username: 'admin', password: '' }) }
+  showDevDialog.value = true
+}
+
+async function saveDevice() {
+  if (!devForm.ip) { ElMessage.warning('请输入 IP'); return }
+  if (!devForm.username) { ElMessage.warning('请输入用户名'); return }
+  savingDev.value = true
+  const data = await post<any>('/api/health/devices', { ...devForm }, { successMsg: '保存成功' })
+  savingDev.value = false
+  if (data) { showDevDialog.value = false; await loadDevices() }
+}
+
+async function delDevice(idx: number) {
+  const ip = devices.value[idx].ip
+  await ElMessageBox.confirm(`确认删除设备 ${devices.value[idx].name || ip}？`, '确认删除', { type: 'warning' })
+  const ok = await post('/api/health/devices/delete', { ip }, { successMsg: '已删除' })
+  if (ok) await loadDevices()
 }
 
 /* ── 报告 ── */
 async function loadReports() {
   loadingList.value = true
-  try {
-    const list = await get<any[]>('/api/health/reports')
-    if (list) reports.value = list.reverse()
-  } finally { loadingList.value = false }
+  try { const list = await get<any[]>('/api/health/reports'); if (list) reports.value = list.reverse() }
+  finally { loadingList.value = false }
 }
 
 async function delReport(id: number, idx: number) {
@@ -341,29 +316,40 @@ async function delReport(id: number, idx: number) {
 function getCheckItems(row: any): any[] {
   if (!row.report) return []
   if (Array.isArray(row.report.checks)) return row.report.checks
-  if (typeof row.report === 'object') {
-    return Object.values(row.report).filter((v: any) => v?.item_name || v?.name)
-  }
+  if (typeof row.report === 'object') return Object.values(row.report).filter((v: any) => v?.item_name || v?.name)
   return []
 }
 
-/* ── 初始化 ── */
 async function loadTemplates() {
   const data = await get<any[]>('/api/health/templates')
-  if (data) {
-    templates.value = data
-    // 默认勾选常用项
-    inspectChecks.value = [...DEFAULT_CHECKS]
-  }
+  if (data) { templates.value = data; inspectChecks.value = [...DEFAULT_CHECKS] }
 }
 
-onMounted(async () => {
-  await Promise.all([loadDevices(), loadTemplates(), loadReports()])
-})
+onMounted(async () => { await Promise.all([loadDevices(), loadTemplates(), loadReports()]) })
 </script>
 
 <style scoped>
 .page { padding: 24px; max-width: 1400px; margin: 0 auto; }
 h2 { margin: 0 0 14px; font-size: 20px; }
-:deep(.el-checkbox.is-bordered) { margin-right: 0 !important; }
+::deep(.el-checkbox.is-bordered) { margin-right: 0 !important; }
+
+/* 设备卡片网格 */
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.device-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; background: #fff; border: 1px solid #e2e8f0;
+  border-radius: 10px; transition: all .2s; cursor: default;
+}
+.device-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 4px 16px rgba(99,102,241,.12);
+  transform: translateY(-2px);
+}
+.dc-icon { font-size: 28px; flex-shrink: 0; width: 42px; text-align: center; }
+.dc-body { flex: 1; min-width: 0; }
+.dc-name { font-size: 14px; font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-ip { font-size: 12px; color: #6366f1; font-family: monospace; margin-top: 2px; }
+.dc-port { color: #94a3b8; font-size: 11px; margin-left: 2px; }
+.dc-user { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.dc-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>
