@@ -7,6 +7,7 @@ from app.api import ssh_devices
 from app.api import ros_rest, ros_mndp, ros_snmp_monitor
 from app.api import ipam, config_backup, health_check, scheduler, alert_webhook, bigscreen
 from app.api import security_baseline, rack, switch_protect, snmp_template
+from app.api import wireless_inspect
 from app.api.diagnostics import dns as diag_dns
 from app.api.diagnostics import tcp_port as diag_tcp
 from app.api.diagnostics import http_check as diag_http
@@ -49,4 +50,5 @@ api_router.include_router(lldp_discovery.router, tags=["lldp"])
 api_router.include_router(report.router, tags=["report"])
 api_router.include_router(ssh_terminal.router, prefix="/ssh", tags=["ssh"])
 api_router.include_router(ssh_devices.router, tags=["ssh"])
+api_router.include_router(wireless_inspect.router, tags=["wireless"])
 api_router.include_router(topology.router, tags=["topology"])

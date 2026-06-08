@@ -49,6 +49,11 @@ const router = createRouter({
       component: () => import('@/views/BigScreen.vue'),
     },
     {
+      path: '/wireless',
+      name: 'WirelessInspect',
+      component: () => import('@/views/WirelessInspect.vue'),
+    },
+    {
       path: '/security',
       name: 'Security',
       component: () => import('@/views/Security.vue'),
