@@ -35,8 +35,20 @@ def del_rack(rack_id:int):
     return {"ok":True}
 
 @router.post("/devices")
-def add_device(rack_id:int=Query(...),name:str=Query(...),vendor:str=Query(""),model:str=Query(""),u_start:int=Query(default=1),u_height:int=Query(default=1),ip:str=Query(""),status:str=Query(default="online")):
-    conn = _db(); conn.execute("INSERT INTO rack_devices (rack_id,name,vendor,model,u_start,u_height,ip,status) VALUES (?,?,?,?,?,?,?,?)",(rack_id,name,vendor,model,u_start,u_height,ip,status)); conn.commit(); conn.close()
+def add_device(rack_id:int=Query(...),name:str=Query(...),vendor:str=Query(""),model:str=Query(""),u_start:int=Query(default=1),u_height:int=Query(default=1),ip:str=Query(""),status:str=Query(default="online"),dev_id:int=Query(default=0)):
+    conn = _db()
+    if dev_id:
+        # 更新已有设备
+        conn.execute(
+            "UPDATE rack_devices SET rack_id=?,name=?,vendor=?,model=?,u_start=?,u_height=?,ip=?,status=? WHERE id=?",
+            (rack_id,name,vendor,model,u_start,u_height,ip,status,dev_id)
+        )
+    else:
+        conn.execute(
+            "INSERT INTO rack_devices (rack_id,name,vendor,model,u_start,u_height,ip,status) VALUES (?,?,?,?,?,?,?,?)",
+            (rack_id,name,vendor,model,u_start,u_height,ip,status)
+        )
+    conn.commit(); conn.close()
     return {"ok":True}
 
 @router.delete("/devices/{dev_id}")

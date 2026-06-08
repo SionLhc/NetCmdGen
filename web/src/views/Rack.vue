@@ -111,9 +111,9 @@
       </template>
     </el-dialog>
 
-    <!-- 添加设备弹窗 -->
-    <el-dialog v-model="showAddDev" title="添加设备" width="420px">
-      <el-alert v-if="selectedRack" :title="`添加到: ${selectedRack.name} 第 ${devForm.ustart}U`" type="info" :closable="false" style="margin-bottom:12px"/>
+    <!-- 添加/编辑设备弹窗 -->
+    <el-dialog v-model="showAddDev" :title="editingDev ? '编辑设备' : '添加设备'" width="420px">
+      <el-alert v-if="selectedRack" :title="editingDev ? `编辑: ${selectedRack.name} 设备` : `添加到: ${selectedRack.name} 第 ${devForm.ustart}U`" type="info" :closable="false" style="margin-bottom:12px"/>
       <el-form label-width="80px">
         <el-form-item label="设备名称"><el-input v-model="devForm.name" placeholder="如：Core-SW-01"/></el-form-item>
         <el-form-item label="品牌"><el-input v-model="devForm.brand" placeholder="如：Huawei"/></el-form-item>
@@ -131,7 +131,30 @@
       </el-form>
       <template #footer>
         <el-button @click="showAddDev = false">取消</el-button>
-        <el-button type="primary" @click="addDev" :loading="loading">添加</el-button>
+        <el-button type="primary" @click="saveDev" :loading="loading">{{ editingDev ? '保存' : '添加' }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 设备详情/操作弹窗 -->
+    <el-dialog v-model="showDevInfo" title="设备详情" width="360px">
+      <div v-if="selectedDev">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="名称">{{ selectedDev.name }}</el-descriptions-item>
+          <el-descriptions-item label="品牌">{{ selectedDev.vendor || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="型号">{{ selectedDev.model || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="IP">{{ selectedDev.ip || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="U位">U{{ selectedDev.u_start }} - U{{ selectedDev.u_start + selectedDev.u_height - 1 }}（{{ selectedDev.u_height }}U）</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="selectedDev.status === 'offline' ? 'danger' : 'success'" size="small">
+              {{ selectedDev.status === 'offline' ? '离线' : '在线' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <template #footer>
+        <el-button @click="showDevInfo = false">关闭</el-button>
+        <el-button type="primary" @click="editDev">修改</el-button>
+        <el-button type="danger" @click="delDev">删除</el-button>
       </template>
     </el-dialog>
   </div>
@@ -150,8 +173,11 @@ const racks = ref<any[]>([])
 const cur = ref<number | null>(null)
 const showAddRack = ref(false)
 const showAddDev = ref(false)
+const showDevInfo = ref(false)
 const editingRack = ref<any>(null)
+const editingDev = ref<any>(null)
 const selectedRack = ref<any>(null)
+const selectedDev = ref<any>(null)
 
 const rackForm = reactive({ name: '', loc: '', rows: 42 })
 const devForm = reactive({ name: '', brand: '', model: '', ip: '', ustart: 1, uheight: 1 })
@@ -237,22 +263,64 @@ function getDevBlockClass(dev: any) {
 
 function onEmptyClick(rack: any, u: number) {
   selectedRack.value = rack
+  editingDev.value = null  // 清编辑状态，进入新增模式
   devForm.ustart = u
   devForm.uheight = 1
   devForm.name = ''; devForm.brand = ''; devForm.model = ''; devForm.ip = ''
   showAddDev.value = true
 }
 
-function onDevClick(rack: any, dev: any) {
-  ElMessageBox.confirm(
-    `设备 "${dev.name}" 位于 U${dev.u_start}-U${dev.u_start + dev.u_height - 1}，需要删除吗？`,
-    '设备信息',
-    { confirmButtonText: '删除', cancelButtonText: '关闭', type: 'info' }
-  ).then(async () => {
-    await fetch(`/api/rack/devices/${dev.id}`, { method: 'DELETE' })
+async function onDevClick(rack: any, dev: any) {
+  selectedRack.value = rack
+  selectedDev.value = dev
+  showDevInfo.value = true
+}
+
+/** 点击修改按钮 → 切换到编辑弹窗 */
+function editDev() {
+  if (!selectedDev.value) return
+  showDevInfo.value = false
+  editingDev.value = selectedDev.value
+  devForm.name = selectedDev.value.name
+  devForm.brand = selectedDev.value.vendor || ''
+  devForm.model = selectedDev.value.model || ''
+  devForm.ip = selectedDev.value.ip || ''
+  devForm.ustart = selectedDev.value.u_start
+  devForm.uheight = selectedDev.value.u_height
+  showAddDev.value = true
+}
+
+/** 删除设备 */
+async function delDev() {
+  if (!selectedDev.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除设备 "${selectedDev.value.name}" 吗？`,
+      '确认删除', { type: 'warning' }
+    )
+    await fetch(`/api/rack/devices/${selectedDev.value.id}`, { method: 'DELETE' })
     ElMessage.success('设备已删除')
+    showDevInfo.value = false
     await loadRacks()
-  }).catch(() => { /* 取消 */ })
+  } catch { /* 取消 */ }
+}
+
+/** 保存设备（新增 or 修改） */
+async function saveDev() {
+  if (!devForm.name) { ElMessage.warning('请输入设备名称'); return }
+  if (!selectedRack.value) return
+  const params = new URLSearchParams({
+    rack_id: String(selectedRack.value.id),
+    name: devForm.name, vendor: devForm.brand, model: devForm.model, ip: devForm.ip,
+    u_start: String(devForm.ustart), u_height: String(devForm.uheight),
+  })
+  // 编辑时附加 dev_id 告诉后端更新
+  if (editingDev.value) params.set('dev_id', String(editingDev.value.id))
+  await fetch(`/api/rack/devices?${params}`, { method: 'POST' })
+  ElMessage.success(editingDev.value ? '设备已更新' : '设备已添加')
+  showAddDev.value = false; editingDev.value = null
+  devForm.name = ''; devForm.brand = ''; devForm.model = ''; devForm.ip = ''
+  await loadRacks()
 }
 
 function editRack(r: any) {
