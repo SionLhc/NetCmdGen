@@ -45,7 +45,8 @@ const router = createRouter({
     },
     {
       path: '/bigscreen',
-      redirect: '/ros',  // 合并到 SNMP 监控
+      name: 'BigScreen',
+      component: () => import('@/views/BigScreen.vue'),
     },
     {
       path: '/security',
