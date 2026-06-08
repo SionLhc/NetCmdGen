@@ -26,7 +26,19 @@
 
     <!-- 备份列表 -->
     <el-table :data="list" size="small" border v-loading="loadingList" empty-text="暂无备份记录">
-      <el-table-column prop="device_name" label="设备" width="150" />
+      <el-table-column prop="device_name" label="设备" width="150">
+        <template #default="{row}">
+          <el-popover trigger="hover" placement="right" :width="420" :show-after="200">
+            <template #reference>
+              <span style="cursor:pointer;color:#1e293b;font-weight:500">{{ row.device_name }}</span>
+            </template>
+            <div class="preview-pop">
+              <div class="preview-head">{{ row.device_name }} · {{ row.created_at }}</div>
+              <pre class="preview-content">{{ row.fullConfig || row.preview || '加载中...' }}</pre>
+            </div>
+          </el-popover>
+        </template>
+      </el-table-column>
       <el-table-column label="配置大小" width="100" align="center">
         <template #default="{row}">
           <el-tag size="small" type="info">{{ formatSize(row.config_size) }}</el-tag>
@@ -141,4 +153,9 @@ onMounted(() => { loadDevices(); loadList() })
 .page { padding: 24px; max-width: 1300px; margin: 0 auto; }
 h2 { margin: 0 0 14px; font-size: 20px; }
 code { background: #f1f5f9; padding: 1px 6px; border-radius: 3px; }
+
+/* 悬停预览卡片 */
+.preview-pop { max-height: 300px; }
+.preview-head { font-weight: 600; font-size: 13px; color: #1e293b; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e2e8f0; }
+.preview-content { margin: 0; font-size: 11px; font-family: monospace; line-height: 1.4; color: #475569; white-space: pre-wrap; max-height: 240px; overflow: auto; background: #f8fafc; padding: 8px; border-radius: 4px; }
 </style>
