@@ -2,6 +2,7 @@
 from fastapi import APIRouter
 
 from app.api import generate, manual, network_tools, tools_extra, tools_subnet, topology
+from app.api import tools_wifi
 from app.api import collaboration, config_audit, lldp_discovery, report, ssh_terminal
 from app.api import ssh_devices
 from app.api import ros_rest, ros_mndp, ros_snmp_monitor
@@ -19,6 +20,7 @@ api_router = APIRouter()
 
 api_router.include_router(tools_subnet.router, prefix="/tools", tags=["tools"])
 api_router.include_router(tools_extra.router, prefix="/tools", tags=["tools"])
+api_router.include_router(tools_wifi.router, prefix="/tools", tags=["tools"])
 api_router.include_router(network_tools.router)  # /net/* 路由（ping/portscan/traceroute/dns）
 
 # 诊断子系统（/api/v1/diagnostics/*）
