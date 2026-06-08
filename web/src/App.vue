@@ -73,10 +73,6 @@
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span>网络巡检</span>
           </router-link>
-          <router-link to="/ros" class="nav-item" active-class="nav-active">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            <span>SNMP 监控</span>
-          </router-link>
           <router-link to="/scheduler" class="nav-item" active-class="nav-active">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             <span>计划任务</span>

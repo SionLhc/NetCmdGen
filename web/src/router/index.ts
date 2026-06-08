@@ -63,10 +63,6 @@ const router = createRouter({
       redirect: '/health',  // 交换机防护合并到网络巡检
     },
     {
-      path: '/snmp-template',
-      redirect: '/ros',     // SNMP模板合并到 SNMP 监控
-    },
-    {
       path: '/generate',
       name: 'Generator',
       component: () => import('@/views/Generator.vue'),
@@ -144,8 +140,7 @@ const router = createRouter({
     },
     {
       path: '/ros',
-      name: 'RosConsole',
-      component: () => import('@/views/RosConsole.vue'),
+      redirect: '/bigscreen',  // SNMP 监控已深度整合到态势大屏
     },
   ],
 })
