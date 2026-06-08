@@ -15,15 +15,15 @@
         <span style="font-size:13px;color:#64748b">已添加 {{ devices.length }} 台设备</span>
         <el-button type="primary" size="small" @click="openDevForm()">+ 添加设备</el-button>
       </div>
-      <el-table :data="devices" size="small" border v-loading="loadingDevs" empty-text="暂无设备，请添加交换机/路由器">
-        <el-table-column prop="name" label="名称" width="130"/>
-        <el-table-column prop="ip" label="IP" width="140"/>
-        <el-table-column prop="username" label="用户名" width="100"/>
-        <el-table-column label="密码" width="90">
-          <template #default><span style="color:#94a3b8">••••••</span></template>
+      <el-table :data="devices" size="small" border v-loading="loadingDevs" empty-text="暂无设备，请添加交换机/路由器" style="width:100%">
+        <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip/>
+        <el-table-column prop="ip" label="IP 地址" width="150" align="center"/>
+        <el-table-column prop="username" label="用户名" width="90" align="center"/>
+        <el-table-column label="凭据" width="70" align="center">
+          <template #default><span style="color:#94a3b8;font-size:11px">****</span></template>
         </el-table-column>
-        <el-table-column prop="port" label="端口" width="70" align="center"/>
-        <el-table-column label="操作" width="160" align="center">
+        <el-table-column prop="port" label="端口" width="65" align="center"/>
+        <el-table-column label="操作" width="110" align="center" fixed="right">
           <template #default="{row,$index}">
             <el-button type="primary" link size="small" @click="openDevForm(row)">编辑</el-button>
             <el-button type="danger" link size="small" @click="delDevice($index)">删除</el-button>
