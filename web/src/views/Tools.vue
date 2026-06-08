@@ -226,67 +226,6 @@
       <!-- Syslog解码 -->
       <template v-if="activeId==='syslog-decode'"><el-table :data="syslogLevels" border size="small"><el-table-column prop="level" label="级别" width="60"/><el-table-column prop="name" label="名称" width="120"/><el-table-column prop="desc" label="说明" min-width="140"/></el-table></template>
 
-      <!-- WiFi 实时状态 -->
-      <template v-if="activeId==='wifi-status'">
-        <div style="text-align:center;margin-bottom:14px"><el-button type="primary" @click="getWifiStatus" :loading="wifiLoading">📡 获取实时状态</el-button></div>
-        <el-descriptions v-if="wifiStatus" :column="2" border size="small">
-          <el-descriptions-item label="状态"><el-tag :type="wifiStatus.connected?'success':'danger'">{{ wifiStatus.connected?'已连接':'未连接' }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="SSID">{{ wifiStatus.ssid||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="BSSID">{{ wifiStatus.bssid||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="信号强度"><el-progress :percentage="wifiStatus.signal||0" :color="(wifiStatus.signal||0)>60?'#67c23a':(wifiStatus.signal||0)>30?'#e6a23c':'#f56c6c'"/></el-descriptions-item>
-          <el-descriptions-item label="信道">{{ wifiStatus.channel||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="无线类型">{{ wifiStatus.radio||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="接收速率">{{ wifiStatus.rx_rate||0 }} Mbps</el-descriptions-item>
-          <el-descriptions-item label="发送速率">{{ wifiStatus.tx_rate||0 }} Mbps</el-descriptions-item>
-          <el-descriptions-item label="认证方式">{{ wifiStatus.auth||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="加密">{{ wifiStatus.cipher||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="网卡">{{ wifiStatus.adapter?.name||'--' }}</el-descriptions-item>
-          <el-descriptions-item label="制造商">{{ wifiStatus.adapter?.manufacturer||'--' }}</el-descriptions-item>
-        </el-descriptions>
-        <div v-else-if="!wifiLoading" style="text-align:center;color:#94a3b8;padding:30px">仅支持 Windows，点击按钮获取</div>
-      </template>
-
-      <!-- WiFi 信道扫描 -->
-      <template v-if="activeId==='wifi-scan'">
-        <div style="text-align:center;margin-bottom:14px"><el-button type="primary" @click="getWifiScan" :loading="wifiLoading">🔍 扫描周围 AP</el-button></div>
-        <el-table v-if="wifiNetworks.length" :data="wifiNetworks" size="small" border max-height="400">
-          <el-table-column prop="ssid" label="SSID" width="160"/>
-          <el-table-column prop="bssid" label="BSSID" width="150"/>
-          <el-table-column label="信号" width="120" align="center">
-            <template #default="{row}"><el-progress :percentage="row.signal" :color="row.signal>60?'#67c23a':row.signal>30?'#e6a23c':'#f56c6c'" :stroke-width="14"/></template>
-          </el-table-column>
-          <el-table-column prop="channel" label="信道" width="60" align="center">
-            <template #default="{row}"><el-tag :type="row.channel>14?'success':''" size="small">{{ row.channel }}</el-tag></template>
-          </el-table-column>
-          <el-table-column prop="radio" label="类型" width="100"/>
-          <el-table-column prop="rate" label="速率" width="90"/>
-        </el-table>
-        <div v-else-if="!wifiLoading" style="text-align:center;color:#94a3b8;padding:30px">仅支持 Windows，点击扫描</div>
-      </template>
-
-      <!-- WiFi 事件日志 -->
-      <template v-if="activeId==='wifi-events'">
-        <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
-          <span style="font-size:12px;color:#64748b">时间范围:</span>
-          <el-input-number v-model="wifiMinutes" :min="1" :max="1440" size="small" style="width:100px"/>
-          <span style="font-size:12px;color:#64748b">分钟</span>
-          <el-button type="primary" size="small" @click="getWifiEvents" :loading="wifiLoading">查询</el-button>
-        </div>
-        <el-table v-if="wifiEventsList.length" :data="wifiEventsList" size="small" border max-height="400">
-          <el-table-column prop="time" label="时间" width="160"/>
-          <el-table-column prop="event_id" label="EventID" width="80" align="center">
-            <template #default="{row}">
-              <el-tag :type="row.event_id===10000?'success':row.event_id===10001||row.event_id===10003?'danger':'warning'" size="small">{{ row.event_id }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="级别" width="60" align="center">
-            <template #default="{row}"><span :style="{color:row.level?.includes('Error')?'#f56c6c':row.level?.includes('Warning')?'#e6a23c':'#67c23a'}">{{ row.level||'--' }}</span></template>
-          </el-table-column>
-          <el-table-column prop="desc" label="描述" min-width="200"/>
-        </el-table>
-        <div v-else-if="!wifiLoading" style="text-align:center;color:#94a3b8;padding:30px">仅支持 Windows，选择时间范围查询</div>
-      </template>
-
       <template #footer><el-button @click="dialogVisible=false">关闭</el-button></template>
     </el-dialog>
   </div>
@@ -337,9 +276,6 @@ const tools = [
   {id:'cable-pinout',icon:'🔌',name:'网线线序参考',desc:'568A/568B/交叉线/反转线线序+用途',level:'p2',category:'参考'},
   {id:'rip-ref',icon:'🔄',name:'RIP 配置参考',desc:'RIPv1/v2 基础配置+认证+汇总(华为/Cisco)',level:'p2',category:'参考'},
   {id:'syslog-decode',icon:'📜',name:'Syslog 消息解码',desc:'日志级别/设施码→中文说明',level:'p2',category:'运维'},
-  {id:'wifi-status',icon:'📡',name:'WiFi 实时状态',desc:'当前信号/信道/速率/网卡驱动',level:'p0',category:'无线'},
-  {id:'wifi-scan',icon:'🔍',name:'WiFi 信道扫描',desc:'周围AP列表/信号强度/信道分布/干扰检测',level:'p1',category:'无线'},
-  {id:'wifi-events',icon:'📋',name:'WiFi 事件日志',desc:'WLAN事件日志查询+断线原因解析',level:'p1',category:'无线'},
 ]
 const search=ref(''), filterLevel=ref('all')
 const filteredTools=computed(()=>tools.filter(t=>(!search.value||t.name.includes(search.value)||t.desc.includes(search.value))&&(filterLevel.value==='all'||t.level===filterLevel.value)))
@@ -352,30 +288,6 @@ function onDialogClosed() {
   loadDns.value = false; loadSplit.value = false
   loadMerge.value = false
   scanProgress.value = false
-  wifiLoading.value = false
-}
-
-// WiFi 工具
-const wifiLoading = ref(false)
-const wifiStatus = ref<any>(null)
-const wifiNetworks = ref<any[]>([])
-const wifiEventsList = ref<any[]>([])
-const wifiMinutes = ref(30)
-
-async function getWifiStatus() {
-  wifiLoading.value = true; wifiStatus.value = null
-  try { const r = await fetch('/api/tools/wifi/status'); wifiStatus.value = await r.json() } catch { }
-  finally { wifiLoading.value = false }
-}
-async function getWifiScan() {
-  wifiLoading.value = true; wifiNetworks.value = []
-  try { const r = await fetch('/api/tools/wifi/networks'); wifiNetworks.value = await r.json() } catch { }
-  finally { wifiLoading.value = false }
-}
-async function getWifiEvents() {
-  wifiLoading.value = true; wifiEventsList.value = []
-  try { const r = await fetch(`/api/tools/wifi/events?minutes=${wifiMinutes.value}`); wifiEventsList.value = await r.json() } catch { }
-  finally { wifiLoading.value = false }
 }
 
 // Subnet
