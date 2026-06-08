@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
 
-router = APIRouter(prefix="/tools", tags=["tools"])
+router = APIRouter(tags=["tools"])
 
 
 # ── netsh 命令封装 ──
