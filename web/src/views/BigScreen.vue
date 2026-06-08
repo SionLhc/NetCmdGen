@@ -361,24 +361,24 @@ onUnmounted(()=>{document.removeEventListener('visibilitychange',onVis);snmpStre
 .snmp-tag.on{background:#6366f1;color:#fff;border-color:#6366f1}
 
 /* 卡片网格 — 可滚动 */
-.card-grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:8px;align-content:start;padding-right:2px}
+.card-grid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;align-content:start;padding-right:2px}
 .card-grid::-webkit-scrollbar{width:4px}
 .card-grid::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
 .card-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#64748b;font-size:13px;gap:8px}
 .card-empty-icon{font-size:40px;opacity:.12}
 
 /* 单张接口卡片 */
-.if-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column}
-.if-card-hd{display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;margin-bottom:4px}
-.if-card-name{font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.if-card-err{font-size:9px;color:#ef4444;flex-shrink:0}.if-card-pts{font-size:9px;color:#475569;flex-shrink:0}
-.if-card-close{margin-left:auto;cursor:pointer;font-size:11px;opacity:.4;transition:.15s}
+.if-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column}
+.if-card-hd{display:flex;align-items:center;gap:4px;font-size:10px;color:#94a3b8;margin-bottom:3px}
+.if-card-name{font-weight:600;color:#c8d2e0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.if-card-err{font-size:8px;color:#ef4444;flex-shrink:0}.if-card-pts{font-size:8px;color:#475569;flex-shrink:0}
+.if-card-close{margin-left:auto;cursor:pointer;font-size:10px;opacity:.4;transition:.15s}
 .if-card-close:hover{opacity:.8;color:#ef4444}
-.if-card-vals{display:flex;gap:12px;margin-bottom:4px}
-.if-val{font-size:12px;font-weight:700}
+.if-card-vals{display:flex;gap:10px;margin-bottom:3px}
+.if-val{font-size:11px;font-weight:700}
 .if-val.rx{color:#22d3ee}.if-val.tx{color:#a78bfa}
-.if-val em{font-size:9px;font-weight:400;opacity:.5;margin-left:2px}
-.if-card-chart{height:120px;width:100%}
+.if-val em{font-size:8px;font-weight:400;opacity:.5;margin-left:1px}
+.if-card-chart{height:90px;width:100%}
 
 /* 事件 */
 .ev-list{max-height:140px;overflow-y:auto;font-size:11px}.ev-row{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}.ev-t{color:#475569;font-family:monospace;font-size:9px;min-width:32px}.ev-dot{width:4px;height:4px;border-radius:50%}.ev-dot.err{background:#f56c6c}.ev-dot.warn{background:#e6a23c}.ev-dot.info{background:#409eff}
