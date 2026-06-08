@@ -19,7 +19,7 @@
           <div class="rack-body">
             <div v-for="u in r.rows" :key="u" class="rack-u" :class="getUClass(r, u)" :title="getUTitle(r, u)" @click.stop="onUClick(r, u)">
               <span class="u-num">{{ r.rows - u + 1 }}</span>
-              <span v-if="getUDevice(r, u)" class="u-device">{{ getUDevice(r, u).name }}</span>
+              <span v-if="isUFirstLine(r, u)" class="u-device">{{ getUDevice(r, u)?.name }}</span>
             </div>
           </div>
           <!-- 机柜底部 -->
@@ -106,16 +106,26 @@ function getUDevice(rack: any, u: number) {
   return (rack.devices || []).find((d: any) => realU >= d.u_start && realU < d.u_start + d.u_height)
 }
 
+/** 是否为设备占用的首行（只在此行显示设备名称） */
+function isUFirstLine(rack: any, u: number) {
+  const dev = getUDevice(rack, u)
+  if (!dev) return false
+  const realU = rack.rows - u + 1
+  return realU === dev.u_start  // 只有起始 U 位才显示设备名称
+}
+
 function getUClass(rack: any, u: number) {
   const dev = getUDevice(rack, u)
   if (!dev) return 'empty'
-  // 根据设备类型返回不同颜色
+  // 首行深色 + 设备类型颜色，非首行浅色
+  const isFirst = isUFirstLine(rack, u)
   const name = (dev.name || '').toLowerCase()
-  if (name.includes('sw') || name.includes('交换')) return 'occupied switch'
-  if (name.includes('rt') || name.includes('路由') || name.includes('fw')) return 'occupied router'
-  if (name.includes('srv') || name.includes('服务')) return 'occupied server'
-  if (name.includes('ups') || name.includes('电源')) return 'occupied ups'
-  return 'occupied'
+  let type = ''
+  if (name.includes('sw') || name.includes('交换')) type = ' switch'
+  else if (name.includes('rt') || name.includes('路由') || name.includes('fw')) type = ' router'
+  else if (name.includes('srv') || name.includes('服务')) type = ' server'
+  else if (name.includes('ups') || name.includes('电源')) type = ' ups'
+  return isFirst ? ('occupied' + type) : ('occupied-sub' + type)
 }
 
 function getUTitle(rack: any, u: number) {
@@ -275,6 +285,12 @@ onMounted(loadRacks)
 .rack-u.occupied.router { background: #fef3c7; border-color: #f59e0b; }
 .rack-u.occupied.server { background: #ede9fe; border-color: #8b5cf6; }
 .rack-u.occupied.ups { background: #fee2e2; border-color: #ef4444; }
+/* 非首行 — 浅色只表示占用 */
+.rack-u.occupied-sub { background: #eff6ff; border-color: #93c5fd; }
+.rack-u.occupied-sub.switch { background: #f0fdf4; border-color: #86efac; }
+.rack-u.occupied-sub.router { background: #fffbeb; border-color: #fcd34d; }
+.rack-u.occupied-sub.server { background: #f5f3ff; border-color: #c4b5fd; }
+.rack-u.occupied-sub.ups { background: #fef2f2; border-color: #fca5a5; }
 
 /* 机柜底部 */
 .rack-footer {
