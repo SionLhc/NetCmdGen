@@ -82,6 +82,11 @@ def _get_db() -> sqlite3.Connection:
             password TEXT DEFAULT ''
         )
     """)
+    # 迁移：添加 protocol 列（telnet/ssh）
+    try:
+        conn.execute("ALTER TABLE health_devices ADD COLUMN protocol TEXT DEFAULT 'ssh'")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
     conn.commit()
     return conn
 
@@ -92,7 +97,7 @@ def _get_db() -> sqlite3.Connection:
 def list_devices():
     """巡检设备列表（返回清单，密码脱敏）"""
     conn = _get_db()
-    rows = conn.execute("SELECT id,name,ip,port,username FROM health_devices ORDER BY id").fetchall()
+    rows = conn.execute("SELECT id,name,ip,port,username,protocol FROM health_devices ORDER BY id").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -105,6 +110,7 @@ def save_device(body: dict):
     port = body.get("port", 22)
     username = body.get("username", "admin")
     password = body.get("password", "")
+    protocol = body.get("protocol", "ssh")  # ssh 或 telnet
     if not ip:
         raise HTTPException(400, "设备 IP 必填")
 
@@ -112,13 +118,13 @@ def save_device(body: dict):
     existing = conn.execute("SELECT id FROM health_devices WHERE ip=?", (ip,)).fetchone()
     if existing:
         conn.execute(
-            "UPDATE health_devices SET name=?,port=?,username=?,password=? WHERE ip=?",
-            (name, port, username, password, ip),
+            "UPDATE health_devices SET name=?,port=?,username=?,password=?,protocol=? WHERE ip=?",
+            (name, port, username, password, protocol, ip),
         )
     else:
         conn.execute(
-            "INSERT INTO health_devices (name,ip,port,username,password) VALUES (?,?,?,?,?)",
-            (name, ip, port, username, password),
+            "INSERT INTO health_devices (name,ip,port,username,password,protocol) VALUES (?,?,?,?,?,?)",
+            (name, ip, port, username, password, protocol),
         )
     conn.commit()
     conn.close()
@@ -193,13 +199,93 @@ async def _ssh_exec_command(host: str, port: int, username: str, password: str, 
         client.connect(host, port=port, username=username, password=password,
                        timeout=10, look_for_keys=False, allow_agent=False)
         stdin, stdout, stderr = client.exec_command(command, timeout=30)
-        # 等待命令执行完毕
         exit_code = stdout.channel.recv_exit_status()
         result = stdout.read().decode("utf-8", errors="replace")
         if not result:
             result = stderr.read().decode("utf-8", errors="replace")
         client.close()
         return result
+    return await asyncio.get_event_loop().run_in_executor(None, _sync)
+
+
+async def _telnet_exec_command(host: str, port: int, username: str, password: str, command: str) -> str:
+    """异步 Telnet 执行单条命令（华为/华三交换机常见方式）"""
+    def _sync():
+        import telnetlib
+        tn = telnetlib.Telnet(host, port, timeout=10)
+        # 等待登录提示，发送用户名密码
+        # 华为交换机提示符通常为 "Username:" / "Password:" 或 "login:" / "Password:"
+        output = b""
+        try:
+            # 读取直到出现用户名提示
+            chunk = tn.read_until(b"Username:", timeout=5)
+        except Exception:
+            # 可能提示符是 "login:" 或其他
+            try:
+                chunk = tn.read_until(b"login:", timeout=5)
+            except Exception:
+                chunk = tn.read_until(b"name:", timeout=5)
+        output += chunk
+        tn.write(username.encode() + b"\n")
+
+        try:
+            chunk = tn.read_until(b"Password:", timeout=5)
+        except Exception:
+            chunk = tn.read_until(b"ssword:", timeout=5)
+        output += chunk
+        tn.write(password.encode() + b"\n")
+
+        # 等待进入命令行（华为提示符通常为 <xxx> 或 [xxx]）
+        try:
+            chunk = tn.read_until(b">", timeout=8)
+        except Exception:
+            try:
+                chunk = tn.read_until(b"]", timeout=8)
+            except Exception:
+                chunk = tn.read_until(b"#", timeout=8)
+        output += chunk
+
+        # 清空缓冲区
+        try:
+            tn.read_very_eager()
+        except Exception:
+            pass
+
+        # 发送命令，分页模式关闭
+        tn.write(("screen-length 0 temporary\n").encode())
+        try:
+            tn.read_until(b"screen-length", timeout=3)
+        except Exception:
+            pass
+
+        tn.write((command + "\n").encode())
+
+        # 读取命令输出，等待提示符再次出现
+        import time as _time
+        _time.sleep(0.8)  # 给交换机一些时间输出
+        try:
+            result_bytes = tn.read_until(b">", timeout=25)
+        except Exception:
+            try:
+                result_bytes = tn.read_until(b"]", timeout=5)
+            except Exception:
+                try:
+                    result_bytes = tn.read_until(b"#", timeout=5)
+                except Exception:
+                    result_bytes = tn.read_very_eager()
+
+        result = result_bytes.decode("utf-8", errors="replace")
+        # 去掉命令回显行
+        lines = result.split("\n")
+        cleaned = []
+        skip_echo = True
+        for line in lines:
+            if skip_echo and (command.strip() in line or "screen-length" in line):
+                skip_echo = False
+                continue
+            cleaned.append(line)
+        tn.close()
+        return "\n".join(cleaned)
     return await asyncio.get_event_loop().run_in_executor(None, _sync)
 
 
@@ -212,8 +298,9 @@ async def run_health_check(
     username: str = Query(...),
     password: str = Query(...),
     checks: str = Query(default="CPU使用率,内存使用率,接口状态,温度状态,风扇状态,电源状态", description="逗号分隔的巡检项"),
+    protocol: str = Query(default="ssh", description="连接协议: ssh 或 telnet"),
 ):
-    """执行真实 SSH 巡检 — 华为交换机命令解析"""
+    """执行真实巡检 — 华为交换机命令解析（支持 SSH / Telnet）"""
     items = [c.strip() for c in checks.split(",") if c.strip()]
     valid_items = []
     for item in items:
@@ -224,8 +311,9 @@ async def run_health_check(
     if not valid_items:
         return {"error": "无有效巡检项", "results": [], "score": 100, "passed": 0, "failed": 0}
 
-    # 巡检引擎
-    engine = InspectionEngine(ssh_executor=_ssh_exec_command)
+    # 根据协议选择执行器
+    executor = _telnet_exec_command if protocol == "telnet" else _ssh_exec_command
+    engine = InspectionEngine(ssh_executor=executor)
 
     devices = [{
         "id": device_id,

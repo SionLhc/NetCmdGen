@@ -31,7 +31,12 @@
             <div class="dc-icon">{{ d.name.toLowerCase().includes('sw') || d.name.includes('交换') ? '🔀' : '🌐' }}</div>
             <div class="dc-body">
               <div class="dc-name">{{ d.name }}</div>
-              <div class="dc-ip">{{ d.ip }}<span class="dc-port">:{{ d.port }}</span></div>
+              <div class="dc-ip">
+                {{ d.ip }}<span class="dc-port">:{{ d.port }}</span>
+                <el-tag :type="d.protocol==='telnet'?'warning':'success'" size="small" effect="plain" style="font-size:10px;height:18px;line-height:18px;margin-left:4px">
+                  {{ d.protocol === 'telnet' ? 'Telnet' : 'SSH' }}
+                </el-tag>
+              </div>
               <div class="dc-user">👤 {{ d.username }}</div>
             </div>
             <div class="dc-actions">
@@ -188,9 +193,15 @@
       <el-form label-width="60px" size="default">
         <el-form-item label="名称"><el-input v-model="devForm.name" placeholder="如 Core-SW1"/></el-form-item>
         <el-form-item label="IP"><el-input v-model="devForm.ip" placeholder="192.168.1.1"/></el-form-item>
+        <el-form-item label="协议">
+          <el-radio-group v-model="devForm.protocol">
+            <el-radio-button label="ssh">SSH</el-radio-button>
+            <el-radio-button label="telnet">Telnet</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="端口"><el-input-number v-model="devForm.port" :min="1" :max="65535" style="width:100%"/></el-form-item>
         <el-form-item label="用户名"><el-input v-model="devForm.username" placeholder="admin"/></el-form-item>
-        <el-form-item label="密码"><el-input v-model="devForm.password" type="password" placeholder="SSH 密码"/></el-form-item>
+        <el-form-item label="密码"><el-input v-model="devForm.password" type="password" :placeholder="devForm.protocol==='telnet'?'Telnet 密码':'SSH 密码'"/></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showDevDialog=false">取消</el-button>
@@ -222,7 +233,7 @@ const batchResults = ref<any[]>([])
 const totalElapsed = ref(0)
 const showDevDialog = ref(false)
 const editIdx = ref(-1)
-const devForm = reactive({ name: '', ip: '', port: 22, username: 'admin', password: '' })
+const devForm = reactive({ name: '', ip: '', port: 22, username: 'admin', password: '', protocol: 'ssh' })
 const savingDev = ref(false)
 const DEFAULT_CHECKS = ['CPU使用率', '内存使用率', '温度状态', '风扇状态', '电源状态', '接口状态']
 const batchStats = computed(() => {
@@ -257,8 +268,9 @@ async function runBatch() {
   const t0 = performance.now()
   for (let i = 0; i < selectedDevices.length; i++) {
     const d = selectedDevices[i]
+    const proto = d.protocol || 'ssh'
     const data = await post<any>(
-      `/api/health/run?device_id=${encodeURIComponent(d.ip)}&device_name=${encodeURIComponent(d.name||d.ip)}&device_ip=${encodeURIComponent(d.ip)}&device_port=${d.port}&username=${encodeURIComponent(d.username)}&password=${encodeURIComponent(d.password)}&checks=${checks}`,
+      `/api/health/run?device_id=${encodeURIComponent(d.ip)}&device_name=${encodeURIComponent(d.name||d.ip)}&device_ip=${encodeURIComponent(d.ip)}&device_port=${d.port}&username=${encodeURIComponent(d.username)}&password=${encodeURIComponent(d.password)}&checks=${checks}&protocol=${proto}`,
       undefined, { timeout: 120 }
     )
     if (data) batchResults.value.push(data)
@@ -279,8 +291,15 @@ async function loadDevices() {
 }
 
 function openDevForm(row?: any) {
-  if (row) { editIdx.value = devices.value.indexOf(row); Object.assign(devForm, row) }
-  else { editIdx.value = -1; Object.assign(devForm, { name: '', ip: '', port: 22, username: 'admin', password: '' }) }
+  if (row) {
+    editIdx.value = devices.value.indexOf(row)
+    Object.assign(devForm, row)
+    devForm.protocol = row.protocol || 'ssh'
+  } else {
+    editIdx.value = -1
+    Object.assign(devForm, { name: '', ip: '', port: 22, username: 'admin', password: '', protocol: 'ssh' })
+    devForm.port = devForm.protocol === 'telnet' ? 23 : 22
+  }
   showDevDialog.value = true
 }
 
