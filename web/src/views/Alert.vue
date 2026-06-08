@@ -1,24 +1,30 @@
 <template>
   <div class="page"><h2>🔔 告警配置</h2>
     <el-card style="margin-bottom:14px"><el-form :inline="true" size="default">
-      <el-form-item label="名称"><el-input v-model="form.name" placeholder="核心交换机离线告警"/></el-form-item>
-      <el-form-item label="类型"><el-select v-model="form.type"><el-option v-for="t in types" :key="t.id" :label="t.name" :value="t.id"/></el-select></el-form-item>
-      <el-form-item label="Webhook"><el-input v-model="form.url" placeholder="企业微信Webhook URL" style="width:300px"/></el-form-item>
-      <el-form-item><el-button type="primary" @click="create">创建规则</el-button></el-form-item>
+      <el-form-item label="名称"><el-input v-model="form.name" placeholder="告警名称" style="width:150px"/></el-form-item>
+      <el-form-item label="类型"><el-select v-model="form.type" style="width:140px"><el-option v-for="o in types" :key="o" :label="o" :value="o"/></el-select></el-form-item>
+      <el-form-item label="Webhook"><el-input v-model="form.webhook" placeholder="https://..." style="width:280px"/></el-form-item>
+      <el-form-item><el-button type="primary" @click="create" :loading="loading">创建规则</el-button></el-form-item>
     </el-form></el-card>
-    <el-table :data="rules" size="small" border><el-table-column prop="name" label="名称" width="140"/><el-table-column prop="alert_type" label="类型" width="100"/>
-      <el-table-column prop="webhook_url" label="Webhook" min-width="200"><template #default="{row}">{{ row.webhook_url?.substring(0,50) || '—' }}</template></el-table-column>
-      <el-table-column label="操作" width="140"><template #default="{row}"><el-button text size="small" @click="test(row.webhook_url)">测试</el-button><el-button text size="small" type="danger" @click="del(row.id)">删除</el-button></template></el-table-column></el-table>
+    <el-table :data="list" size="small" border v-loading="loadingList">
+      <el-table-column prop="name" label="名称"/><el-table-column prop="type" label="类型" width="100"/>
+      <el-table-column prop="webhook" label="Webhook URL" min-width="200"/><el-table-column label="操作" width="160" align="center">
+        <template #default="{row}"><el-button size="small" @click="test(row)" :loading="testing===row.id">测试</el-button>
+        <el-button size="small" type="danger" @click="del(row)">删除</el-button></template></el-table-column></el-table>
+    <el-empty v-if="!loadingList && !list.length" description="暂无告警规则"/>
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'; import { ElMessage } from 'element-plus'
-const rules=ref<any[]>([]); const types=[{id:'device_offline',name:'设备离线'},{id:'port_flap',name:'端口抖动'},{id:'traffic_spike',name:'流量异常'},{id:'cpu_high',name:'CPU过载'},{id:'config_change',name:'配置变更'}]
-const form=ref({name:'',type:'device_offline',url:''})
-async function load(){const r=await fetch('/api/alert/rules');rules.value=await r.json()}
-async function create(){const p=new URLSearchParams({name:form.value.name,alert_type:form.value.type,webhook_url:form.value.url});await fetch('/api/alert/rules?'+p,{method:'POST'});form.value.name='';load()}
-async function del(id:number){await fetch(`/api/alert/rules/${id}`,{method:'DELETE'});load()}
-async function test(url:string){const r=await fetch(`/api/alert/test?webhook_url=${encodeURIComponent(url)}`);const d=await r.json();ElMessage[d.ok?'success':'error'](d.ok?'推送成功':d.error)}
+import { ref, onMounted, reactive } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRequest } from '@/composables/useRequest'
+const { loading, get, post } = useRequest()
+const loadingList = ref(false); const list = ref<any[]>([]); const testing = ref(''); const form = reactive({ name: '', type: 'wechat', webhook: '' })
+const types = ['wechat', 'dingtalk', 'email']
+async function load() { loadingList.value = true; try { const data = await get<any[]>('/api/alert/rules'); if (data) list.value = data } finally { loadingList.value = false } }
+async function create() { if (!form.name) { ElMessage.warning('请输入规则名称'); return }; if (!form.webhook) { ElMessage.warning('请输入 Webhook URL'); return }; await post('/api/alert/rules', form, { successMsg: '已创建', errorMsg: '创建失败' }); load() }
+async function test(row: any) { testing.value = row.id; const r = await fetch(`/api/alert/test/${row.id}`, { method: 'POST' }); if (r.ok) { const d = await r.json(); ElMessage[d.ok ? 'success' : 'error'](d.ok ? '测试发送成功' : '测试失败') } else ElMessage.error(`测试失败: ${r.status}`); testing.value = '' }
+async function del(row: any) { try { await ElMessageBox.confirm('确定删除？', '确认', { type: 'warning' }); await post(`/api/alert/rules/${row.id}/delete`); load() } catch { /* 取消 */ } }
 onMounted(load)
 </script>
-<style scoped>.page{padding:24px;max-width:900px;margin:0 auto}h2{margin:0 0 14px;font-size:20px}</style>
+<style scoped>.page{padding:24px;max-width:1300px;margin:0 auto}h2{margin:0 0 14px;font-size:20px}</style>

@@ -1,46 +1,51 @@
 <template>
   <div class="page"><h2>🗄️ 机柜管理</h2>
-    <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap"><el-button size="small" type="primary" @click="showAdd=true">+ 新增机柜</el-button>
-      <el-select v-model="activeRack" placeholder="选择机柜" size="small" style="width:200px" @change="load"><el-option v-for="r in racks" :key="r.id" :label="r.name" :value="r.id"/></el-select>
+    <el-card style="margin-bottom:14px"><el-form :inline="true" size="default">
+      <el-form-item label="机柜"><el-select v-model="cur" placeholder="选择机柜" style="width:180px" @change="refresh"><el-option v-for="r in racks" :key="r.id" :label="r.name" :value="r.id"/></el-select></el-form-item>
+      <el-form-item><el-button @click="showAddRack=true">新增机柜</el-button>
+      <el-button type="primary" @click="showAddDev=true">添加设备</el-button></el-form-item>
+    </el-form></el-card>
+    <!-- 机柜可视化 -->
+    <div class="rack-vis" v-if="rack">
+      <div class="rack-box"><div v-for="u in rack.rows" :key="u" class="rack-u" :class="{ occupied: occupiedAt(u) }" @click="pickU(u)">
+        <span class="ru-num">{{ u }}</span><span v-if="occupiedAt(u)" class="ru-dev">{{ devNameAt(u) }}</span></div></div>
     </div>
-    <el-dialog v-model="showAdd" title="新增机柜" width="360px"><el-form label-width="80px" size="default">
-      <el-form-item label="名称"><el-input v-model="f.name" placeholder="A01"/></el-form-item>
-      <el-form-item label="位置"><el-input v-model="f.loc" placeholder="机房A排"/></el-form-item>
-      <el-form-item label="U数"><el-input-number v-model="f.rows" :min="12" :max="48"/></el-form-item>
-    </el-form><template #footer><el-button @click="showAdd=false">取消</el-button><el-button type="primary" @click="addRack">创建</el-button></template></el-dialog>
-    <el-dialog v-model="showDev" title="添加设备" width="380px"><el-form label-width="80px" size="default">
-      <el-form-item label="名称"><el-input v-model="df.name" placeholder="交换机-01"/></el-form-item>
-      <el-form-item label="品牌"><el-input v-model="df.vendor"/></el-form-item>
-      <el-form-item label="U位起"><el-input-number v-model="df.ustart" :min="1" :max="48"/></el-form-item>
-      <el-form-item label="U高度"><el-input-number v-model="df.uheight" :min="1" :max="10"/></el-form-item>
-      <el-form-item label="IP"><el-input v-model="df.ip"/></el-form-item>
-    </el-form><template #footer><el-button @click="showDev=false">取消</el-button><el-button type="primary" @click="addDev">添加</el-button></template></el-dialog>
-    <div v-if="rack" class="rack-visual">
-      <div class="ru" v-for="u in rack.rows" :key="u" :class="{occupied:deviceAtU(u)}" @click="selectU(u)">
-        <span class="ru-num">{{ rack.rows-u+1 }}</span>
-        <div v-if="deviceAtU(u)" class="ru-dev" :title="deviceAtU(u).name">
-          <span class="ru-name">{{ deviceAtU(u).name }}</span>
-          <span class="ru-det">{{ deviceAtU(u).vendor }} · U{{ deviceAtU(u).u_start }}-{{ deviceAtU(u).u_start+deviceAtU(u).u_height-1 }}</span>
-        </div>
-      </div>
-    </div>
-    <div v-if="rack" style="margin-top:10px"><el-button size="small" @click="showDev=true">+ 添加设备到 {{ rack.name }}</el-button></div>
+    <el-empty v-if="!cur" description="请先选择机柜"/>
+    <!-- 弹窗 -->
+    <el-dialog v-model="showAddRack" title="新增机柜" width="360px"><el-form size="default" label-width="60px">
+      <el-form-item label="名称"><el-input v-model="rackForm.name" placeholder="A1-01"/></el-form-item>
+      <el-form-item label="位置"><el-input v-model="rackForm.loc" placeholder="机房A"/></el-form-item>
+      <el-form-item label="U数"><el-input-number v-model="rackForm.rows" :min="4" :max="48"/></el-form-item>
+    </el-form><template #footer><el-button @click="showAddRack=false">取消</el-button><el-button type="primary" @click="addRack" :loading="loading">保存</el-button></template></el-dialog>
+    <el-dialog v-model="showAddDev" title="添加设备" width="360px"><el-form size="default" label-width="60px">
+      <el-form-item label="名称"><el-input v-model="devForm.name" placeholder="Core-01"/></el-form-item>
+      <el-form-item label="品牌"><el-input v-model="devForm.brand" placeholder="Huawei"/></el-form-item>
+      <el-form-item label="U位">U{{ devForm.ustart }} - U{{ devForm.ustart + devForm.uheight - 1 }}</el-form-item>
+      <el-form-item label="高度(U)"><el-input-number v-model="devForm.uheight" :min="1" :max="12" @change="onHeightChange"/></el-form-item>
+    </el-form><template #footer><el-button @click="showAddDev=false">取消</el-button><el-button type="primary" @click="addDev" :loading="loading">保存</el-button></template></el-dialog>
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-const racks=ref<any[]>([]);const activeRack=ref('');const rack=ref<any>(null);const showAdd=ref(false);const showDev=ref(false)
-const f=ref({name:'',loc:'',rows:42});const df=ref({name:'',vendor:'',ustart:1,uheight:1,ip:''})
-function deviceAtU(u:number){if(!rack.value)return null;const rev=rack.value.rows-u+1;for(const d of rack.value.devices||[]){if(rev>=d.u_start&&rev<d.u_start+d.u_height)return d}return null}
-function selectU(u:number){const d=deviceAtU(u);if(d){df.value.ustart=u;df.value.uheight=1}}
-async function load(){const r=await fetch('/api/rack/racks');racks.value=await r.json();if(activeRack.value)rack.value=racks.value.find((x:any)=>x.id==activeRack.value)}
-async function addRack(){await fetch(`/api/rack/racks?name=${encodeURIComponent(f.value.name)}&location=${f.value.loc}&rows=${f.value.rows}`,{method:'POST'});showAdd.value=false;load()}
-async function addDev(){await fetch(`/api/rack/devices?rack_id=${rack.value.id}&name=${encodeURIComponent(df.value.name)}&vendor=${df.value.vendor}&u_start=${df.value.ustart}&u_height=${df.value.uheight}&ip=${df.value.ip}`,{method:'POST'});showDev.value=false;load()}
-onMounted(load)
+import { ref, onMounted, reactive } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useRequest } from '@/composables/useRequest'
+const { loading, get, post } = useRequest()
+const racks = ref<any[]>([]); const cur = ref(''); const rack = ref<any>(null); const showAddRack = ref(false); const showAddDev = ref(false)
+const rackForm = reactive({ name: '', loc: '', rows: 42 })
+const devForm = reactive({ name: '', brand: '', ustart: 1, uheight: 1 })
+async function loadRacks() { const data = await get<any[]>('/api/rack'); if (data) racks.value = data }
+async function refresh() { if (!cur.value) return; const r = racks.value.find((x: any) => x.id === cur.value); if (r) rack.value = { ...r, devices: r.devices || [] } }
+function occupiedAt(u: number) { if (!rack.value) return false; return (rack.value.devices || []).some((d: any) => u >= d.u_start && u < d.u_start + d.u_height) }
+function devNameAt(u: number) { const d = (rack.value.devices || []).find((d: any) => u >= d.u_start && u < d.u_start + d.u_height); return d?.name || '' }
+function pickU(u: number) { if (occupiedAt(u)) { ElMessage.warning('该 U 位已被占用'); return } devForm.ustart = u; showAddDev.value = true }
+function onHeightChange() { /* U位变更 */ }
+async function addRack() { if (!rackForm.name) { ElMessage.warning('请输入名称'); return }; await post('/api/rack', rackForm, { successMsg: '机柜已创建', errorMsg: '创建失败' }); showAddRack.value = false; await loadRacks() }
+async function addDev() { if (!devForm.name) { ElMessage.warning('请输入设备名称'); return }; await post(`/api/rack/${cur.value}/devices`, devForm, { successMsg: '设备已添加', errorMsg: '添加失败' }); showAddDev.value = false; refresh() }
+onMounted(loadRacks)
 </script>
 <style scoped>
-.page{padding:24px;max-width:900px;margin:0 auto}h2{margin:0 0 14px;font-size:20px}
-.rack-visual{background:#1e293b;border-radius:10px;padding:8px;max-width:320px}
-.ru{height:30px;display:flex;align-items:center;border-bottom:1px solid #334155;padding:0 8px;cursor:pointer;transition:.2s}.ru:hover{background:rgba(255,255,255,.05)}
-.ru.occupied{background:rgba(59,130,246,.15)}.ru-num{color:#64748b;font-size:11px;width:24px}.ru-dev{font-size:11px;color:#e2e8f0;flex:1;display:flex;justify-content:space-between}.ru-det{color:#64748b}
+.page{padding:24px;max-width:1300px;margin:0 auto}h2{margin:0 0 14px;font-size:20px}
+.rack-vis{display:flex;gap:12px;justify-content:center}.rack-box{background:#f0f2f5;border:1px solid #e5e7eb;border-radius:8px;padding:4px}
+.rack-u{display:flex;align-items:center;justify-content:space-between;width:220px;padding:2px 10px;font-size:12px;border-bottom:1px solid #e5e7eb;cursor:pointer;transition:.1s}.rack-u:hover{background:#e8edf2}
+.rack-u.occupied{background:#fee2e2;cursor:not-allowed}.ru-num{color:#94a3b8;font-family:monospace;width:28px}.ru-dev{color:#475569;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
