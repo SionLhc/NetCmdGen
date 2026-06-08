@@ -152,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 
@@ -209,6 +209,11 @@ const snmpIfaces = ref<Record<string,Iface[]>>({})
 const snmpStreams = ref<SnmpStream[]>([])
 const showAddDev = ref(false)
 const showSettings = ref(false)
+
+// 设置弹窗打开时，主动加载所有设备接口
+watch(showSettings, (v) => {
+  if (v) snmpDevices.value.forEach(d => { if (!snmpIfaces.value[d.id]) loadIfaces(d) })
+})
 const devForm = reactive({name:'',host:''})
 const SNMP_POLL = 3000; const SNMP_MAX = 100
 const C = ['#6366f1','#06b6d4','#f59e0b','#10b981','#ef4444','#ec4899','#8b5cf6','#14b8a6']
