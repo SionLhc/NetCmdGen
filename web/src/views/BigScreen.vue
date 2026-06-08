@@ -9,8 +9,8 @@
       </div>
       <div class="big-hd-right">
         <span class="big-clock">{{ clock }}</span>
-        <button class="big-btn" @click="showAddDev=true" v-if="!snmpStreams.length">+ 添加 SNMP 设备</button>
-        <button class="big-btn" @click="stopAllSnmp" v-if="snmpStreams.length">⏹ 停止监控</button>
+        <button class="big-btn" @click="showAddDev=true">+ 添加设备</button>
+        <button class="big-btn" @click="stopAllSnmp" v-if="snmpStreams.length">⏹ 停止</button>
       </div>
     </header>
 
