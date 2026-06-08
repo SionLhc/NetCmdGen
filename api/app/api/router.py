@@ -9,6 +9,7 @@ from app.api import ros_rest, ros_mndp, ros_snmp_monitor
 from app.api import ipam, config_backup, health_check, scheduler, alert_webhook, bigscreen
 from app.api import security_baseline, rack, switch_protect, snmp_template
 from app.api import wireless_inspect
+from app.api import batch_cmd
 from app.api.diagnostics import dns as diag_dns
 from app.api.diagnostics import tcp_port as diag_tcp
 from app.api.diagnostics import http_check as diag_http
@@ -44,6 +45,7 @@ api_router.include_router(alert_webhook.router, tags=["alert"])
 api_router.include_router(bigscreen.router, tags=["bigscreen"])
 api_router.include_router(security_baseline.router, tags=["security"])
 api_router.include_router(rack.router, tags=["rack"])
+api_router.include_router(batch_cmd.router, tags=["batch"])
 api_router.include_router(switch_protect.router, tags=["switch-protect"])
 api_router.include_router(snmp_template.router, tags=["snmp-template"])
 api_router.include_router(collaboration.router, tags=["collab"])
