@@ -57,8 +57,83 @@ def _get_db() -> sqlite3.Connection:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS health_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT DEFAULT '',
+            ip TEXT NOT NULL UNIQUE,
+            port INTEGER DEFAULT 22,
+            username TEXT DEFAULT 'admin',
+            password TEXT DEFAULT ''
+        )
+    """)
     conn.commit()
     return conn
+
+
+# ── 设备管理 API ──
+
+@router.get("/devices")
+def list_devices():
+    """巡检设备列表（返回清单，密码脱敏）"""
+    conn = _get_db()
+    rows = conn.execute("SELECT id,name,ip,port,username FROM health_devices ORDER BY id").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@router.post("/devices")
+def save_device(body: dict):
+    """添加/更新巡检设备"""
+    name = body.get("name", "") or body.get("ip", "")
+    ip = body.get("ip", "")
+    port = body.get("port", 22)
+    username = body.get("username", "admin")
+    password = body.get("password", "")
+    if not ip:
+        raise HTTPException(400, "设备 IP 必填")
+
+    conn = _get_db()
+    existing = conn.execute("SELECT id FROM health_devices WHERE ip=?", (ip,)).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE health_devices SET name=?,port=?,username=?,password=? WHERE ip=?",
+            (name, port, username, password, ip),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO health_devices (name,ip,port,username,password) VALUES (?,?,?,?,?)",
+            (name, ip, port, username, password),
+        )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/devices/delete")
+def delete_device(body: dict):
+    """删除巡检设备"""
+    ip = body.get("ip", "")
+    if not ip:
+        raise HTTPException(400, "IP 必填")
+    conn = _get_db()
+    conn.execute("DELETE FROM health_devices WHERE ip=?", (ip,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/reports/delete")
+def delete_report(body: dict):
+    """删除巡检报告"""
+    rid = body.get("id")
+    if not rid:
+        raise HTTPException(400, "id 必填")
+    conn = _get_db()
+    conn.execute("DELETE FROM health_reports WHERE id=?", (rid,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
 
 
 @router.get("/templates")
