@@ -4,7 +4,7 @@
     <header class="dash-header">
       <div class="hd-left">
         <span class="hd-logo">📡</span>
-        <span class="hd-title">NetFlow Monitor</span>
+        <span class="hd-title">SNMP 流量监控</span>
         <span class="hd-badge" v-if="streams.length">{{ streams.length }} 条监控</span>
       </div>
       <div class="hd-right">

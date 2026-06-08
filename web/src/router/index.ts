@@ -45,8 +45,7 @@ const router = createRouter({
     },
     {
       path: '/bigscreen',
-      name: 'BigScreen',
-      component: () => import('@/views/BigScreen.vue'),
+      redirect: '/ros',  // 合并到 SNMP 监控
     },
     {
       path: '/security',
@@ -60,13 +59,11 @@ const router = createRouter({
     },
     {
       path: '/switch-protect',
-      name: 'SwitchProtect',
-      component: () => import('@/views/SwitchProtect.vue'),
+      redirect: '/health',  // 交换机防护合并到网络巡检
     },
     {
       path: '/snmp-template',
-      name: 'SnmpTemplate',
-      component: () => import('@/views/SnmpTemplate.vue'),
+      redirect: '/ros',     // SNMP模板合并到 SNMP 监控
     },
     {
       path: '/generate',
