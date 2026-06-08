@@ -33,14 +33,14 @@ const { loading, get, post } = useRequest()
 const racks = ref<any[]>([]); const cur = ref(''); const rack = ref<any>(null); const showAddRack = ref(false); const showAddDev = ref(false)
 const rackForm = reactive({ name: '', loc: '', rows: 42 })
 const devForm = reactive({ name: '', brand: '', ustart: 1, uheight: 1 })
-async function loadRacks() { const data = await get<any[]>('/api/rack'); if (data) racks.value = data }
+async function loadRacks() { const data = await get<any[]>('/api/rack/racks'); if (data) racks.value = data }
 async function refresh() { if (!cur.value) return; const r = racks.value.find((x: any) => x.id === cur.value); if (r) rack.value = { ...r, devices: r.devices || [] } }
 function occupiedAt(u: number) { if (!rack.value) return false; return (rack.value.devices || []).some((d: any) => u >= d.u_start && u < d.u_start + d.u_height) }
 function devNameAt(u: number) { const d = (rack.value.devices || []).find((d: any) => u >= d.u_start && u < d.u_start + d.u_height); return d?.name || '' }
 function pickU(u: number) { if (occupiedAt(u)) { ElMessage.warning('该 U 位已被占用'); return } devForm.ustart = u; showAddDev.value = true }
 function onHeightChange() { /* U位变更 */ }
-async function addRack() { if (!rackForm.name) { ElMessage.warning('请输入名称'); return }; await post('/api/rack', rackForm, { successMsg: '机柜已创建', errorMsg: '创建失败' }); showAddRack.value = false; await loadRacks() }
-async function addDev() { if (!devForm.name) { ElMessage.warning('请输入设备名称'); return }; await post(`/api/rack/${cur.value}/devices`, devForm, { successMsg: '设备已添加', errorMsg: '添加失败' }); showAddDev.value = false; refresh() }
+async function addRack() { if (!rackForm.name) { ElMessage.warning('请输入名称'); return }; const params = new URLSearchParams({ name: rackForm.name, location: rackForm.loc, rows: String(rackForm.rows) }); await fetch(`/api/rack/racks?${params}`, { method: 'POST' }); showAddRack.value = false; await loadRacks() }
+async function addDev() { if (!devForm.name) { ElMessage.warning('请输入设备名称'); return }; const params = new URLSearchParams({ rack_id: String(cur.value), name: devForm.name, vendor: devForm.brand, u_start: String(devForm.ustart), u_height: String(devForm.uheight) }); await fetch(`/api/rack/devices?${params}`, { method: 'POST' }); showAddDev.value = false; refresh() }
 onMounted(loadRacks)
 </script>
 <style scoped>
