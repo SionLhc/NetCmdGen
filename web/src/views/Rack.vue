@@ -12,6 +12,37 @@
       </div>
     </div>
 
+    <!-- 座位搜索 -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center">
+      <el-input v-model="searchKey" placeholder="搜索座位号/接口/设备名，如 A01" size="default" style="width:280px" clearable @keyup.enter="doSearch" @clear="searchResults=[]">
+        <template #prefix><span style="font-size:14px">🔍</span></template>
+      </el-input>
+      <el-button type="primary" @click="doSearch" :loading="searching">搜索</el-button>
+      <span v-if="searchResults.length" style="font-size:12px;color:#64748b">{{ searchResults.length }} 条结果</span>
+    </div>
+
+    <!-- 搜索结果 -->
+    <el-card v-if="searchResults.length" style="margin-bottom:14px">
+      <template #header>🔍 搜索结果 · {{ searchKey }}</template>
+      <el-table :data="searchResults" size="small" border max-height="300">
+        <el-table-column prop="seat" label="座位号" width="80" />
+        <el-table-column label="机柜" width="140">
+          <template #default="{row}">{{ row.rack_name }} <span style="color:#94a3b8;font-size:11px">({{ row.region||'--' }})</span></template>
+        </el-table-column>
+        <el-table-column label="交换机" width="160">
+          <template #default="{row}"><strong>{{ row.device_name }}</strong></template>
+        </el-table-column>
+        <el-table-column prop="port" label="接口" width="140" />
+        <el-table-column label="交换机IP" width="130">
+          <template #default="{row}"><code style="font-size:11px">{{ row.device_ip||'--' }}</code></template>
+        </el-table-column>
+        <el-table-column label="U位" width="60" align="center">
+          <template #default="{row}">U{{ row.u_start }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="100" />
+      </el-table>
+    </el-card>
+
     <!-- 机房视图：多机柜并排 -->
     <div class="room-view">
       <div v-for="r in filteredRacks" :key="r.id" class="rack-column" :class="{ active: cur === r.id }" @click="cur = r.id">
@@ -206,6 +237,10 @@ const seatForm = reactive({ seat: '', port: '', remark: '' })
 const currentSeats = ref<any[]>([])
 
 // 导入
+const searchKey = ref('')
+const searchResults = ref<any[]>([])
+const searching = ref(false)
+
 const importRackId = ref<number | null>(null)
 const importDevId = ref<number | null>(null)
 const importData = ref('')
@@ -233,6 +268,15 @@ async function loadRacks() {
 }
 async function loadRegions() {
   try { const r = await fetch('/api/rack/regions'); regions.value = await r.json() } catch { regions.value = [] }
+}
+async function doSearch() {
+  if (!searchKey.value.trim()) { searchResults.value = []; return }
+  searching.value = true
+  try {
+    const r = await fetch(`/api/rack/search?q=${encodeURIComponent(searchKey.value.trim())}`)
+    searchResults.value = await r.json()
+  } catch { searchResults.value = [] }
+  finally { searching.value = false }
 }
 async function loadSeats(devId: number) {
   try { const r = await fetch(`/api/rack/seats?device_id=${devId}`); currentSeats.value = await r.json() } catch { currentSeats.value = [] }

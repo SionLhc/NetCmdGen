@@ -188,6 +188,27 @@ def del_device(dev_id: int):
     return {"ok": True}
 
 
+# ── 座位搜索 ──
+
+@router.get("/search")
+def search_seat(q: str = Query(default="", description="搜索关键字：座位号、接口名或设备名")):
+    """根据座位号/接口名搜索对应的交换机、机柜、区域"""
+    conn = _db()
+    kw = f"%{q.strip()}%"
+    rows = conn.execute("""
+        SELECT ps.*, r.name as rack_name, r.location, r.region,
+               d.name as device_name, d.vendor, d.model, d.ip as device_ip,
+               d.u_start, d.u_height
+        FROM port_seats ps
+        JOIN racks r ON r.id = ps.rack_id
+        JOIN rack_devices d ON d.id = ps.device_id
+        WHERE ps.seat LIKE ? OR ps.port LIKE ? OR d.name LIKE ? OR r.name LIKE ?
+        ORDER BY r.region, r.name, ps.seat
+    """, (kw, kw, kw, kw)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # ── 接口-座位映射 ──
 
 @router.get("/seats")
