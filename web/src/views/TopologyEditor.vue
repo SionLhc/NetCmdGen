@@ -27,14 +27,13 @@
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleUndo" title="Ctrl+Z">↩ 撤销</el-button>
         <el-button size="small" @click="handleRedo" title="Ctrl+Y">↪ 重做</el-button>
-        <el-divider direction="vertical" />
-        <el-button size="small" type="primary" @click="handleSave" :loading="autoSaving">💾 保存</el-button>
-        <el-button size="small" @click="handleImportJson">📥 导入 JSON</el-button>
-        <el-button size="small" @click="handleDownload">📤 导出 JSON</el-button>
-        <el-button size="small" @click="handleExportPng">🖼 导出 PNG</el-button>
       </div>
       <div class="toolbar-right">
         <TopoSearch @search="onTopoSearch" @filter="onTopoFilter" />
+        <el-button size="small" type="primary" @click="handleSave" :loading="autoSaving">💾 保存</el-button>
+        <el-button size="small" @click="handleImportJson">📥 导入</el-button>
+        <el-button size="small" @click="handleDownload">📤 导出</el-button>
+        <el-button size="small" @click="handleExportPng">🖼 PNG</el-button>
         <el-button type="success" size="small" @click="handleExportToWorkbench">导出到命令工作台</el-button>
       </div>
     </div>
