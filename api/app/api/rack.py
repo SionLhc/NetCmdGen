@@ -268,45 +268,109 @@ async def import_seats(
     rack_id: int = Query(...),
     device_id: int = Query(...),
     device_name: str = Query(default=""),
-    data: str = Query(default="", description="JSON 字符串: [{\"seat\":\"A01\",\"port\":\"GE0/0/1\"},...]"),
+    data: str = Query(default=""),
 ):
     """
     批量导入接口-座位映射
-    数据格式（JSON 数组）或简单文本格式（每行一条：座位,端口,备注）
+    支持 CSV（带表头）或纯文本格式：
+      座位号,接口名,备注
+      A01,GE0/0/1,办公区-张三
     """
     conn = _db()
-    imported = 0
+    imported = skipped = 0
+    lines = data.strip().split("\n")
 
-    # 尝试 JSON 解析
-    try:
-        items = json.loads(data)
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and item.get("seat") and item.get("port"):
-                    conn.execute(
-                        "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
-                        (rack_id, device_id, device_name,
-                         item["seat"], item["port"], item.get("remark", "")),
-                    )
-                    imported += 1
-    except (json.JSONDecodeError, TypeError):
-        # 非 JSON → 按纯文本逐行解析：座位,端口,备注
-        for line in data.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            parts = [p.strip() for p in line.split(",")]
-            if len(parts) >= 2:
-                seat_val = parts[0]
-                port_val = parts[1]
-                remark_val = parts[2] if len(parts) >= 3 else ""
-                if seat_val and port_val:
-                    conn.execute(
-                        "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
-                        (rack_id, device_id, device_name, seat_val, port_val, remark_val),
-                    )
-                    imported += 1
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        # 跳过 CSV 表头行
+        first_cell = line.split(",")[0].strip().lower() if "," in line else ""
+        if first_cell in ("座位号", "座位", "seat"):
+            continue
+
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 2 and parts[0] and parts[1]:
+            seat_val = parts[0]
+            port_val = parts[1]
+            remark_val = parts[2] if len(parts) >= 3 else ""
+            # 去重检查
+            exist = conn.execute(
+                "SELECT id FROM port_seats WHERE device_id=? AND seat=? AND port=?",
+                (device_id, seat_val, port_val),
+            ).fetchone()
+            if exist:
+                # 更新备注
+                conn.execute(
+                    "UPDATE port_seats SET remark=? WHERE id=?",
+                    (remark_val, exist["id"]),
+                )
+                imported += 1
+            else:
+                conn.execute(
+                    "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
+                    (rack_id, device_id, device_name, seat_val, port_val, remark_val),
+                )
+                imported += 1
+        else:
+            skipped += 1
 
     conn.commit()
     conn.close()
-    return {"ok": True, "imported": imported}
+    return {"ok": True, "imported": imported, "skipped": skipped}
+
+
+@router.get("/export/{rack_id}")
+def export_rack(rack_id: int):
+    """导出整个机柜的接口-座位映射为 CSV"""
+    import csv, io
+    conn = _db()
+    # 获取机柜信息
+    rack = conn.execute("SELECT * FROM racks WHERE id=?", (rack_id,)).fetchone()
+    if not rack:
+        conn.close()
+        return {"error": "机柜不存在"}
+
+    # 获取所有设备及其端口映射
+    rows = conn.execute("""
+        SELECT ps.seat, ps.port, ps.remark,
+               d.name as device_name, d.vendor, d.model, d.ip, d.u_start
+        FROM port_seats ps
+        JOIN rack_devices d ON d.id = ps.device_id
+        WHERE ps.rack_id = ?
+        ORDER BY d.name, ps.seat, ps.port
+    """, (rack_id,)).fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    # 标准模板表头
+    writer.writerow(["座位号", "接口名", "备注", "交换机名称", "交换机IP", "U位"])
+    for r in rows:
+        writer.writerow([
+            r["seat"], r["port"], r["remark"] or "",
+            r["device_name"], r["ip"] or "", str(r["u_start"] or ""),
+        ])
+    csv_content = output.getvalue()
+    output.close()
+
+    return {
+        "ok": True,
+        "filename": f"{rack['name']}_{rack['region'] or ''}.csv",
+        "data": csv_content,
+    }
+
+
+@router.get("/template")
+def download_template():
+    """下载标准导入模板 CSV"""
+    import csv, io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["座位号", "接口名", "备注"])
+    writer.writerow(["示例: A01", "示例: GE0/0/1", "示例: 办公区-张三"])
+    writer.writerow(["A01", "GE0/0/1", ""])
+    writer.writerow(["A02", "GE0/0/2", ""])
+    csv_content = output.getvalue()
+    output.close()
+    return {"data": csv_content, "filename": "接口座位映射模板.csv"}

@@ -171,38 +171,60 @@
       </template>
     </el-dialog>
 
-    <!-- 批量导入弹窗 -->
-    <el-dialog v-model="showImportDialog" title="📥 批量导入接口-座位映射" width="600px">
-      <el-alert title="导入格式说明" type="info" :closable="false" style="margin-bottom:12px">
-        <div style="font-size:12px;line-height:1.8">
-          每行一条：<code>座位号,接口名,备注(可选)</code><br/>
-          示例：<br/>
-          <code>A01,GE0/0/1,办公区-张三</code><br/>
-          <code>A02,GE0/0/2,办公区-李四</code><br/>
-          <code>B01,GE0/0/3,会议室</code>
-        </div>
-      </el-alert>
-      <el-form label-width="80px">
-        <el-form-item label="目标机柜">
-          <el-select v-model="importRackId" placeholder="选择机柜" style="width:100%">
-            <el-option v-for="r in racks" :key="r.id" :label="`${r.name} (${r.region||'--'})`" :value="r.id"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="目标设备">
-          <el-select v-model="importDevId" placeholder="选择设备" style="width:100%" :disabled="!importRackId">
-            <el-option v-for="d in importDevices" :key="d.id" :label="`${d.name} (U${d.u_start})`" :value="d.id"/>
-          </el-select>
-        </el-form-item>
-        <el-form-item label="映射数据">
-          <el-input v-model="importData" type="textarea" :rows="10" placeholder="座位号,接口名,备注&#10;A01,GE0/0/1&#10;A02,GE0/0/2&#10;..."/>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showImportDialog = false">取消</el-button>
-        <el-button type="primary" @click="doImport" :loading="importing" :disabled="!importRackId||!importDevId||!importData.trim()">
-          开始导入
-        </el-button>
-      </template>
+    <!-- 批量导入/导出弹窗 -->
+    <el-dialog v-model="showImportDialog" title="📥 批量导入/导出" width="650px">
+      <el-tabs v-model="importTab" type="border-card" style="box-shadow:none">
+        <!-- 导入 Tab -->
+        <el-tab-pane label="📥 导入数据" name="import">
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <el-button size="small" @click="downloadTemplate">📄 下载模板</el-button>
+            <el-button size="small" type="success" @click="exportRackData" :disabled="!importRackId">
+              📤 导出现有数据
+            </el-button>
+          </div>
+          <el-form label-width="80px">
+            <el-form-item label="目标机柜">
+              <el-select v-model="importRackId" placeholder="选择机柜" style="width:100%">
+                <el-option v-for="r in racks" :key="r.id" :label="`${r.name} (${r.region||'--'})`" :value="r.id"/>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="目标设备">
+              <el-select v-model="importDevId" placeholder="选择设备" style="width:100%" :disabled="!importRackId">
+                <el-option v-for="d in importDevices" :key="d.id" :label="`${d.name} (U${d.u_start})`" :value="d.id"/>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="粘贴数据">
+              <el-input v-model="importData" type="textarea" :rows="10"
+                placeholder="粘贴 CSV 数据，支持带表头或不带表头：&#10;座位号,接口名,备注&#10;A01,GE0/0/1,办公区-张三&#10;A02,GE0/0/2,办公区-李四"/>
+            </el-form-item>
+          </el-form>
+          <template #footer>
+            <el-button @click="showImportDialog = false">取消</el-button>
+            <el-button type="primary" @click="doImport" :loading="importing"
+              :disabled="!importRackId||!importDevId||!importData.trim()">开始导入</el-button>
+          </template>
+        </el-tab-pane>
+        <!-- 导出 Tab -->
+        <el-tab-pane label="📤 导出数据" name="export">
+          <el-form label-width="80px">
+            <el-form-item label="选择机柜">
+              <el-select v-model="exportRackId" placeholder="选择要导出数据的机柜" style="width:100%">
+                <el-option v-for="r in racks" :key="r.id" :label="`${r.name} (${r.region||'--'})`" :value="r.id"/>
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <div v-if="exportPreview" style="margin-top:8px">
+            <div style="font-size:12px;color:#64748b;margin-bottom:4px">预览（前10行）</div>
+            <pre style="background:#f8fafc;padding:10px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto">{{ exportPreview }}</pre>
+          </div>
+          <template #footer>
+            <el-button @click="showImportDialog = false">关闭</el-button>
+            <el-button type="primary" @click="doExport" :disabled="!exportRackId" :loading="exporting">
+              📥 导出为 CSV 文件
+            </el-button>
+          </template>
+        </el-tab-pane>
+      </el-tabs>
     </el-dialog>
   </div>
 </template>
@@ -241,10 +263,14 @@ const searchKey = ref('')
 const searchResults = ref<any[]>([])
 const searching = ref(false)
 
+const importTab = ref('import')
 const importRackId = ref<number | null>(null)
 const importDevId = ref<number | null>(null)
 const importData = ref('')
 const importing = ref(false)
+const exportRackId = ref<number | null>(null)
+const exportPreview = ref('')
+const exporting = ref(false)
 
 interface Block { key: string; type: 'empty' | 'device'; startU: number; count: number; device?: any }
 
@@ -383,9 +409,52 @@ async function doImport() {
   const p = new URLSearchParams({ rack_id: String(rack.id), device_id: String(dev.id), device_name: dev.name, data: importData.value })
   const r = await fetch(`/api/rack/seats/import?${p}`, { method: 'POST' })
   const result = await r.json()
-  ElMessage.success(`成功导入 ${result.imported} 条映射`)
-  importing.value = false; showImportDialog.value = false; importData.value = ''; importRackId.value = null; importDevId.value = null
+  if (result.skipped) ElMessage.warning(`${result.imported} 条导入/更新，${result.skipped} 条跳过`)
+  else ElMessage.success(`成功导入 ${result.imported} 条映射`)
+  importing.value = false; importData.value = ''; importRackId.value = null; importDevId.value = null
   await loadRacks()
+}
+
+// 下载标准模板
+async function downloadTemplate() {
+  const r = await fetch('/api/rack/template'); const d = await r.json()
+  downloadText(d.filename, d.data)
+}
+// 导出现有数据
+async function exportRackData() {
+  if (!importRackId.value) return
+  const r = await fetch(`/api/rack/export/${importRackId.value}`)
+  const d = await r.json()
+  if (d.data) downloadText(d.filename, d.data)
+  else ElMessage.warning('该机柜暂无映射数据')
+}
+// 导出 Tab：实时预览
+watch(exportRackId, async (id) => {
+  if (!id) { exportPreview.value = ''; return }
+  const r = await fetch(`/api/rack/export/${id}`)
+  const d = await r.json()
+  if (d.data) {
+    const lines = d.data.split('\n')
+    exportPreview.value = lines.slice(0, 11).join('\n') + (lines.length > 11 ? '\n... 共 ' + (lines.length - 1) + ' 条' : '')
+  } else { exportPreview.value = '该机柜暂无映射数据' }
+})
+async function doExport() {
+  if (!exportRackId.value) return
+  exporting.value = true
+  const r = await fetch(`/api/rack/export/${exportRackId.value}`)
+  const d = await r.json()
+  if (d.data) downloadText(d.filename, d.data)
+  exporting.value = false
+}
+
+/** 触发浏览器下载文本文件 */
+function downloadText(filename: string, content: string) {
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8' })  // BOM 确保 Excel 正确识别中文
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = filename
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(a.href)
 }
 
 onMounted(async () => { await loadRegions(); await loadRacks() })

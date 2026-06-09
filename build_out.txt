@@ -32,7 +32,7 @@ computing gzip size...
 [2mdist/[22m[35massets/Index-kDyfDxGG.css              [39m[1m[2m    1.62 kB[22m[1m[22m[2m │ gzip:   0.63 kB[22m
 [2mdist/[22m[35massets/Ipam-CmjC7fFg.css               [39m[1m[2m    1.93 kB[22m[1m[22m[2m │ gzip:   0.64 kB[22m
 [2mdist/[22m[35massets/Dashboard-B9T7zAE-.css          [39m[1m[2m    2.11 kB[22m[1m[22m[2m │ gzip:   0.68 kB[22m
-[2mdist/[22m[35massets/Rack-bHenXCJ6.css               [39m[1m[2m    3.23 kB[22m[1m[22m[2m │ gzip:   0.99 kB[22m
+[2mdist/[22m[35massets/Rack-3--w1DMq.css               [39m[1m[2m    3.23 kB[22m[1m[22m[2m │ gzip:   1.00 kB[22m
 [2mdist/[22m[35massets/Home-B5mvHZDe.css               [39m[1m[2m    3.45 kB[22m[1m[22m[2m │ gzip:   1.00 kB[22m
 [2mdist/[22m[35massets/TopologyEditor-NoqV4f_B.css     [39m[1m[2m    4.90 kB[22m[1m[22m[2m │ gzip:   1.36 kB[22m
 [2mdist/[22m[35massets/PingDiagnostic-COB10AFV.css     [39m[1m[2m    5.07 kB[22m[1m[22m[2m │ gzip:   1.37 kB[22m
@@ -42,41 +42,41 @@ computing gzip size...
 [2mdist/[22m[35massets/SshTerminal-IvFAKdtj.css        [39m[1m[2m    7.43 kB[22m[1m[22m[2m │ gzip:   2.56 kB[22m
 [2mdist/[22m[35massets/Generator-BOvSF8L1.css          [39m[1m[2m   28.02 kB[22m[1m[22m[2m │ gzip:   4.29 kB[22m
 [2mdist/[22m[35massets/index-L106F4ie.css              [39m[1m[2m  360.01 kB[22m[1m[22m[2m │ gzip:  48.62 kB[22m
-[2mdist/[22m[36massets/Diagnostics-DTJC-fMS.js         [39m[1m[2m    0.26 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
-[2mdist/[22m[36massets/useRequest-B7uQGBYR.js          [39m[1m[2m    0.92 kB[22m[1m[22m[2m │ gzip:   0.59 kB[22m
-[2mdist/[22m[36massets/useSseStream-Db4337Tf.js        [39m[1m[2m    1.45 kB[22m[1m[22m[2m │ gzip:   0.83 kB[22m
-[2mdist/[22m[36massets/Manual-BNRwVg7Z.js              [39m[1m[2m    3.02 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
-[2mdist/[22m[36massets/Scheduler-C6u4pA1O.js           [39m[1m[2m    3.03 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
-[2mdist/[22m[36massets/Alert-CMTG2Bjv.js               [39m[1m[2m    3.06 kB[22m[1m[22m[2m │ gzip:   1.51 kB[22m
-[2mdist/[22m[36massets/MtuDiagnostic-CEJ-A5cq.js       [39m[1m[2m    3.54 kB[22m[1m[22m[2m │ gzip:   1.79 kB[22m
-[2mdist/[22m[36massets/Index-BNacgbbY.js               [39m[1m[2m    3.91 kB[22m[1m[22m[2m │ gzip:   1.56 kB[22m
-[2mdist/[22m[36massets/HttpDiagnostic-eB-RE7SP.js      [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   2.00 kB[22m
-[2mdist/[22m[36massets/DnsDiagnostic-Cnf0mUWt.js       [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   2.12 kB[22m
-[2mdist/[22m[36massets/Backup-CmXQiOpw.js              [39m[1m[2m    4.73 kB[22m[1m[22m[2m │ gzip:   2.37 kB[22m
-[2mdist/[22m[36massets/Dashboard-QgnGOjAU.js           [39m[1m[2m    5.02 kB[22m[1m[22m[2m │ gzip:   2.13 kB[22m
-[2mdist/[22m[36massets/TcpPortDiagnostic-COJykFJX.js   [39m[1m[2m    5.03 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m
-[2mdist/[22m[36massets/Home-CUmOKX-V.js                [39m[1m[2m    5.29 kB[22m[1m[22m[2m │ gzip:   2.26 kB[22m
-[2mdist/[22m[36massets/HistoryDiagnostic-DrbwuqMh.js   [39m[1m[2m    5.52 kB[22m[1m[22m[2m │ gzip:   2.67 kB[22m
-[2mdist/[22m[36massets/JitterDiagnostic-DjN6rY-t.js    [39m[1m[2m    5.79 kB[22m[1m[22m[2m │ gzip:   2.53 kB[22m
-[2mdist/[22m[36massets/BatchCmd-CMU02_z3.js            [39m[1m[2m    5.99 kB[22m[1m[22m[2m │ gzip:   2.73 kB[22m
-[2mdist/[22m[36massets/Ipam-DRxKmNla.js                [39m[1m[2m    8.61 kB[22m[1m[22m[2m │ gzip:   3.16 kB[22m
-[2mdist/[22m[36massets/TraceDiagnostic-BGhZ796G.js     [39m[1m[2m    9.08 kB[22m[1m[22m[2m │ gzip:   3.84 kB[22m
-[2mdist/[22m[36massets/PingDiagnostic-PZg4nG8G.js      [39m[1m[2m   10.49 kB[22m[1m[22m[2m │ gzip:   4.26 kB[22m
-[2mdist/[22m[36massets/Health-DyDB1kgK.js              [39m[1m[2m   14.61 kB[22m[1m[22m[2m │ gzip:   5.14 kB[22m
-[2mdist/[22m[36massets/BigScreen-CwrrpSDm.js           [39m[1m[2m   14.68 kB[22m[1m[22m[2m │ gzip:   5.58 kB[22m
-[2mdist/[22m[36massets/WirelessInspect-C_ezP4MZ.js     [39m[1m[2m   15.45 kB[22m[1m[22m[2m │ gzip:   5.56 kB[22m
-[2mdist/[22m[36massets/Rack-B4kdE_6x.js                [39m[1m[2m   18.25 kB[22m[1m[22m[2m │ gzip:   5.75 kB[22m
+[2mdist/[22m[36massets/Diagnostics-Bk5WAmBc.js         [39m[1m[2m    0.26 kB[22m[1m[22m[2m │ gzip:   0.22 kB[22m
+[2mdist/[22m[36massets/useRequest-BWoVsd4i.js          [39m[1m[2m    0.92 kB[22m[1m[22m[2m │ gzip:   0.59 kB[22m
+[2mdist/[22m[36massets/useSseStream-xTJjlN8j.js        [39m[1m[2m    1.45 kB[22m[1m[22m[2m │ gzip:   0.83 kB[22m
+[2mdist/[22m[36massets/Manual-BDDVXyee.js              [39m[1m[2m    3.02 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
+[2mdist/[22m[36massets/Scheduler-RgFHFu9K.js           [39m[1m[2m    3.03 kB[22m[1m[22m[2m │ gzip:   1.45 kB[22m
+[2mdist/[22m[36massets/Alert-kNhg1bTf.js               [39m[1m[2m    3.06 kB[22m[1m[22m[2m │ gzip:   1.51 kB[22m
+[2mdist/[22m[36massets/MtuDiagnostic-B2SOf1s3.js       [39m[1m[2m    3.54 kB[22m[1m[22m[2m │ gzip:   1.80 kB[22m
+[2mdist/[22m[36massets/Index-YbNbkrhn.js               [39m[1m[2m    3.91 kB[22m[1m[22m[2m │ gzip:   1.56 kB[22m
+[2mdist/[22m[36massets/HttpDiagnostic-HIy2l54e.js      [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   2.01 kB[22m
+[2mdist/[22m[36massets/DnsDiagnostic-DvP_2b40.js       [39m[1m[2m    4.49 kB[22m[1m[22m[2m │ gzip:   2.13 kB[22m
+[2mdist/[22m[36massets/Backup-xYIbtTev.js              [39m[1m[2m    4.73 kB[22m[1m[22m[2m │ gzip:   2.38 kB[22m
+[2mdist/[22m[36massets/Dashboard-C9W8HqA_.js           [39m[1m[2m    5.02 kB[22m[1m[22m[2m │ gzip:   2.13 kB[22m
+[2mdist/[22m[36massets/TcpPortDiagnostic-C1Cipn8e.js   [39m[1m[2m    5.03 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m
+[2mdist/[22m[36massets/Home-BX52G3bd.js                [39m[1m[2m    5.29 kB[22m[1m[22m[2m │ gzip:   2.26 kB[22m
+[2mdist/[22m[36massets/HistoryDiagnostic-Dd6bJlPV.js   [39m[1m[2m    5.52 kB[22m[1m[22m[2m │ gzip:   2.67 kB[22m
+[2mdist/[22m[36massets/JitterDiagnostic-DFi3rFmk.js    [39m[1m[2m    5.79 kB[22m[1m[22m[2m │ gzip:   2.53 kB[22m
+[2mdist/[22m[36massets/BatchCmd-DkUBaO62.js            [39m[1m[2m    5.99 kB[22m[1m[22m[2m │ gzip:   2.73 kB[22m
+[2mdist/[22m[36massets/Ipam-D7V4y0Kg.js                [39m[1m[2m    8.61 kB[22m[1m[22m[2m │ gzip:   3.16 kB[22m
+[2mdist/[22m[36massets/TraceDiagnostic-AFHAtlsK.js     [39m[1m[2m    9.08 kB[22m[1m[22m[2m │ gzip:   3.84 kB[22m
+[2mdist/[22m[36massets/PingDiagnostic-D664UYdC.js      [39m[1m[2m   10.49 kB[22m[1m[22m[2m │ gzip:   4.26 kB[22m
+[2mdist/[22m[36massets/Health-BhoZyZ-6.js              [39m[1m[2m   14.61 kB[22m[1m[22m[2m │ gzip:   5.14 kB[22m
+[2mdist/[22m[36massets/BigScreen-WNIGxdkg.js           [39m[1m[2m   14.68 kB[22m[1m[22m[2m │ gzip:   5.58 kB[22m
+[2mdist/[22m[36massets/WirelessInspect-BSzAsp16.js     [39m[1m[2m   15.45 kB[22m[1m[22m[2m │ gzip:   5.56 kB[22m
+[2mdist/[22m[36massets/Rack-DONnvYxf.js                [39m[1m[2m   20.66 kB[22m[1m[22m[2m │ gzip:   6.46 kB[22m
 [2mdist/[22m[36massets/index-CqnY1jsH.js               [39m[1m[2m   44.76 kB[22m[1m[22m[2m │ gzip:  17.56 kB[22m
-[2mdist/[22m[36massets/Tools-_20u4bk7.js               [39m[1m[2m   67.00 kB[22m[1m[22m[2m │ gzip:  20.92 kB[22m
-[2mdist/[22m[36massets/TopologyEditor-B7uBR1s6.js      [39m[1m[2m  144.61 kB[22m[1m[22m[2m │ gzip:  48.01 kB[22m
-[2mdist/[22m[36massets/SshTerminal-CP2Z3Soe.js         [39m[1m[2m  343.36 kB[22m[1m[22m[2m │ gzip:  88.48 kB[22m
-[2mdist/[22m[36massets/Generator-d8FMoLZ_.js           [39m[1m[33m  548.39 kB[39m[22m[2m │ gzip: 156.68 kB[22m
-[2mdist/[22m[36massets/deviceIcons-DPUYoEm3.js         [39m[1m[33m  561.70 kB[39m[22m[2m │ gzip: 160.85 kB[22m
-[2mdist/[22m[36massets/index-BEtI-Rrn.js               [39m[1m[33m1,052.28 kB[39m[22m[2m │ gzip: 347.37 kB[22m
+[2mdist/[22m[36massets/Tools-CrbY1BS-.js               [39m[1m[2m   67.00 kB[22m[1m[22m[2m │ gzip:  20.92 kB[22m
+[2mdist/[22m[36massets/TopologyEditor-uCmOl3co.js      [39m[1m[2m  144.61 kB[22m[1m[22m[2m │ gzip:  48.01 kB[22m
+[2mdist/[22m[36massets/SshTerminal-DuDmsLfQ.js         [39m[1m[2m  343.36 kB[22m[1m[22m[2m │ gzip:  88.48 kB[22m
+[2mdist/[22m[36massets/Generator-7YodTpFn.js           [39m[1m[33m  548.39 kB[39m[22m[2m │ gzip: 156.68 kB[22m
+[2mdist/[22m[36massets/deviceIcons-CsWashXI.js         [39m[1m[33m  561.70 kB[39m[22m[2m │ gzip: 160.85 kB[22m
+[2mdist/[22m[36massets/index-BqvzF_qx.js               [39m[1m[33m1,052.28 kB[39m[22m[2m │ gzip: 347.37 kB[22m
 [2mdist/[22m[36massets/index-BBsSYmfd.js               [39m[1m[33m1,128.94 kB[39m[22m[2m │ gzip: 379.03 kB[22m
 [33m
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
-[32m✓ built in 21.76s[39m
+[32m✓ built in 15.43s[39m
