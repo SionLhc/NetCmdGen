@@ -4,7 +4,7 @@
     <header class="big-header">
       <div class="big-hd-left">
         <span class="big-logo">📡</span>
-        <span class="big-title">NetCmdGen 运维态势大屏</span>
+        <span class="big-title">网络运维态势大屏</span>
         <span class="big-badge" v-if="snmpStreams.length">{{ snmpStreams.length }} 路</span>
       </div>
       <div class="big-hd-right">

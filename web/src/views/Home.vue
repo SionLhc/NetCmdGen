@@ -52,7 +52,7 @@
       <div class="stat-item"><span class="stat-num">3.6k</span><span class="stat-label">命令速查</span></div>
     </section>
 
-    <footer class="footer">NetCmdGen · MIT License · 社区共建</footer>
+    <footer class="footer">网络运维工具箱 · MIT License · 社区共建</footer>
   </div>
 </template>
 

@@ -6,8 +6,8 @@
           <svg viewBox="0 0 32 32" class="logo-svg"><rect x="4" y="4" width="24" height="24" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="3" fill="currentColor"/><circle cx="21" cy="18" r="3" fill="currentColor"/><line x1="12" y1="11" x2="12" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="21" y1="11" x2="21" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </div>
         <div class="logo-text-area">
-          <span class="logo-text">NetCmdGen</span>
-          <span class="logo-sub">网络命令生成器</span>
+          <span class="logo-text">网络运维工具箱</span>
+          <span class="logo-sub">Network Ops Toolkit</span>
         </div>
       </div>
 
