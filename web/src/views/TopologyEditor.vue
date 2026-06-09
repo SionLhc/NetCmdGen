@@ -1,11 +1,10 @@
 <template>
   <div class="topology-container">
-    <!-- 顶部工具栏 -->
+    <!-- 顶部工具栏行1：拓扑管理 -->
     <div class="toolbar">
       <div class="toolbar-left">
         <span class="title">企业园区网拓扑编辑器</span>
         <el-divider direction="vertical" />
-        <!-- 多拓扑管理 -->
         <el-select v-model="currentTopoId" size="small" style="width:180px" @change="switchTopo" placeholder="选择拓扑">
           <el-option v-for="t in topoList" :key="t.id" :label="t.name" :value="t.id"/>
         </el-select>
@@ -27,16 +26,21 @@
         <el-divider direction="vertical" />
         <el-button size="small" @click="handleUndo" title="Ctrl+Z">↩ 撤销</el-button>
         <el-button size="small" @click="handleRedo" title="Ctrl+Y">↪ 重做</el-button>
-      </div>
-      <div class="toolbar-right">
+        <el-divider direction="vertical" />
         <TopoSearch @search="onTopoSearch" @filter="onTopoFilter" />
-        <el-button size="small" type="primary" @click="handleSave" :loading="autoSaving">💾 保存</el-button>
-        <el-button size="small" @click="handleImportJson">📥 导入</el-button>
-        <el-button size="small" @click="handleDownload">📤 导出</el-button>
-        <el-button size="small" @click="handleExportPng">🖼 PNG</el-button>
-        <el-button type="success" size="small" @click="handleExportToWorkbench">导出到命令工作台</el-button>
       </div>
     </div>
+
+    <!-- 行2：保存 / 导入 / 导出 / 命令工作台 — 在拓扑下拉框正下方 -->
+    <div class="toolbar-actions">
+      <el-button type="primary" @click="handleSave" :loading="autoSaving" :disabled="!currentTopoId">💾 保存到服务器</el-button>
+      <el-button @click="handleImportJson">📥 导入 JSON</el-button>
+      <el-button @click="handleDownload" :disabled="!currentTopoId">📤 导出 JSON</el-button>
+      <el-button @click="handleExportPng" :disabled="!currentTopoId">🖼 导出 PNG</el-button>
+      <el-divider direction="vertical" />
+      <el-button type="success" @click="handleExportToWorkbench" :disabled="!currentTopoId">📋 复制到命令工作台</el-button>
+    </div>
+
     <TopoStats :nodes="topoNodeCount" :edges="topoEdgeCount" :online="topoOnline" :offline="topoOffline" />
 
     <div class="main-content">
@@ -1502,6 +1506,16 @@ async function handleExportPng() {
   font-size: 16px;
   font-weight: 700;
   color: #1e293b;
+}
+
+/* ── 行2：保存/导入/导出/命令工作台 ── */
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .main-content {
