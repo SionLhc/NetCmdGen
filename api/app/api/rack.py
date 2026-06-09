@@ -1,57 +1,291 @@
-"""机柜管理"""
+"""机柜管理 — 区域划分 + 接口座位映射 + 批量导入"""
+import json
 import sqlite3
 from pathlib import Path
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException, UploadFile, File
 
 router = APIRouter(prefix="/rack", tags=["rack"])
-DB_DIR = Path(__file__).parent.parent / "data"; DB_PATH = DB_DIR / "rack.db"
+DB_DIR = Path(__file__).parent.parent / "data"
+DB_PATH = DB_DIR / "rack.db"
+
 
 def _db() -> sqlite3.Connection:
     DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH)); conn.row_factory = sqlite3.Row
-    conn.execute("CREATE TABLE IF NOT EXISTS racks (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, location TEXT, rows INTEGER DEFAULT 42, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-    conn.execute("CREATE TABLE IF NOT EXISTS rack_devices (id INTEGER PRIMARY KEY AUTOINCREMENT, rack_id INTEGER, name TEXT, vendor TEXT, model TEXT, u_start INTEGER DEFAULT 1, u_height INTEGER DEFAULT 1, ip TEXT, status TEXT DEFAULT 'online', FOREIGN KEY(rack_id) REFERENCES racks(id))")
-    conn.commit(); return conn
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    # 机柜表（增加 region 字段）
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS racks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT, location TEXT, region TEXT DEFAULT '',
+            rows INTEGER DEFAULT 42,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    # 设备表
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS rack_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rack_id INTEGER, name TEXT, vendor TEXT, model TEXT,
+            u_start INTEGER DEFAULT 1, u_height INTEGER DEFAULT 1,
+            ip TEXT, status TEXT DEFAULT 'online',
+            FOREIGN KEY(rack_id) REFERENCES racks(id)
+        )
+    """)
+    # 接口-座位映射表
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS port_seats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rack_id INTEGER NOT NULL,
+            device_id INTEGER NOT NULL,
+            device_name TEXT DEFAULT '',
+            seat TEXT NOT NULL,
+            port TEXT NOT NULL,
+            remark TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(rack_id) REFERENCES racks(id),
+            FOREIGN KEY(device_id) REFERENCES rack_devices(id)
+        )
+    """)
+    # 迁移：旧表补 region 列
+    try:
+        conn.execute("ALTER TABLE racks ADD COLUMN region TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+    conn.commit()
+    return conn
+
+
+# ── 区域 ──
+
+@router.get("/regions")
+def list_regions():
+    """获取所有区域列表"""
+    conn = _db()
+    rows = conn.execute(
+        "SELECT DISTINCT region FROM racks WHERE region != '' ORDER BY region"
+    ).fetchall()
+    conn.close()
+    return [r["region"] for r in rows]
+
+
+# ── 机柜 CRUD ──
 
 @router.get("/racks")
-def list_racks():
-    conn = _db(); rows = conn.execute("SELECT * FROM racks ORDER BY name").fetchall()
+def list_racks(region: str = Query(default="")):
+    """获取机柜列表，支持按区域筛选"""
+    conn = _db()
+    if region:
+        rows = conn.execute(
+            "SELECT * FROM racks WHERE region=? ORDER BY name", (region,)
+        ).fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM racks ORDER BY region, name").fetchall()
     result = []
     for r in rows:
         d = dict(r)
-        d["devices"] = [dict(x) for x in conn.execute("SELECT * FROM rack_devices WHERE rack_id=?",(d["id"],)).fetchall()]
+        d["devices"] = [
+            dict(x)
+            for x in conn.execute(
+                "SELECT * FROM rack_devices WHERE rack_id=?", (d["id"],)
+            ).fetchall()
+        ]
+        # 附带每个设备的端口映射数量
+        for dev in d["devices"]:
+            cnt = conn.execute(
+                "SELECT COUNT(*) FROM port_seats WHERE device_id=?", (dev["id"],)
+            ).fetchone()[0]
+            dev["port_seat_count"] = cnt
         result.append(d)
-    conn.close(); return result
+    conn.close()
+    return result
+
 
 @router.post("/racks")
-def add_rack(name: str = Query(...), location: str = Query(default=""), rows: int = Query(default=42)):
-    conn = _db(); conn.execute("INSERT INTO racks (name,location,rows) VALUES (?,?,?)",(name,location,rows)); conn.commit()
-    rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]; conn.close()
-    return {"ok":True, "id":rid}
+def add_rack(
+    name: str = Query(...),
+    location: str = Query(default=""),
+    rows: int = Query(default=42),
+    region: str = Query(default=""),
+):
+    conn = _db()
+    conn.execute(
+        "INSERT INTO racks (name,location,rows,region) VALUES (?,?,?,?)",
+        (name, location, rows, region),
+    )
+    conn.commit()
+    rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    return {"ok": True, "id": rid}
+
+
+@router.post("/racks/update")
+def update_rack(
+    rack_id: int = Query(...),
+    name: str = Query(...),
+    location: str = Query(default=""),
+    rows: int = Query(default=42),
+    region: str = Query(default=""),
+):
+    conn = _db()
+    conn.execute(
+        "UPDATE racks SET name=?,location=?,rows=?,region=? WHERE id=?",
+        (name, location, rows, region, rack_id),
+    )
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
 
 @router.delete("/racks/{rack_id}")
-def del_rack(rack_id:int):
-    conn = _db(); conn.execute("DELETE FROM rack_devices WHERE rack_id=?",(rack_id,)); conn.execute("DELETE FROM racks WHERE id=?",(rack_id,)); conn.commit(); conn.close()
-    return {"ok":True}
+def del_rack(rack_id: int):
+    conn = _db()
+    conn.execute("DELETE FROM port_seats WHERE rack_id=?", (rack_id,))
+    conn.execute("DELETE FROM rack_devices WHERE rack_id=?", (rack_id,))
+    conn.execute("DELETE FROM racks WHERE id=?", (rack_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ── 设备 CRUD ──
 
 @router.post("/devices")
-def add_device(rack_id:int=Query(...),name:str=Query(...),vendor:str=Query(""),model:str=Query(""),u_start:int=Query(default=1),u_height:int=Query(default=1),ip:str=Query(""),status:str=Query(default="online"),dev_id:int=Query(default=0)):
+def add_device(
+    rack_id: int = Query(...),
+    name: str = Query(...),
+    vendor: str = Query(""),
+    model: str = Query(""),
+    u_start: int = Query(default=1),
+    u_height: int = Query(default=1),
+    ip: str = Query(""),
+    status: str = Query(default="online"),
+    dev_id: int = Query(default=0),
+):
     conn = _db()
     if dev_id:
-        # 更新已有设备
         conn.execute(
             "UPDATE rack_devices SET rack_id=?,name=?,vendor=?,model=?,u_start=?,u_height=?,ip=?,status=? WHERE id=?",
-            (rack_id,name,vendor,model,u_start,u_height,ip,status,dev_id)
+            (rack_id, name, vendor, model, u_start, u_height, ip, status, dev_id),
         )
     else:
         conn.execute(
             "INSERT INTO rack_devices (rack_id,name,vendor,model,u_start,u_height,ip,status) VALUES (?,?,?,?,?,?,?,?)",
-            (rack_id,name,vendor,model,u_start,u_height,ip,status)
+            (rack_id, name, vendor, model, u_start, u_height, ip, status),
         )
-    conn.commit(); conn.close()
-    return {"ok":True}
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
 
 @router.delete("/devices/{dev_id}")
-def del_device(dev_id:int):
-    conn = _db(); conn.execute("DELETE FROM rack_devices WHERE id=?",(dev_id,)); conn.commit(); conn.close()
-    return {"ok":True}
+def del_device(dev_id: int):
+    conn = _db()
+    conn.execute("DELETE FROM port_seats WHERE device_id=?", (dev_id,))
+    conn.execute("DELETE FROM rack_devices WHERE id=?", (dev_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ── 接口-座位映射 ──
+
+@router.get("/seats")
+def list_seats(rack_id: int = Query(default=0), device_id: int = Query(default=0)):
+    """查询接口-座位映射，可按机柜或设备筛选"""
+    conn = _db()
+    if device_id:
+        rows = conn.execute(
+            "SELECT * FROM port_seats WHERE device_id=? ORDER BY seat, port",
+            (device_id,),
+        ).fetchall()
+    elif rack_id:
+        rows = conn.execute(
+            "SELECT * FROM port_seats WHERE rack_id=? ORDER BY seat, port",
+            (rack_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM port_seats ORDER BY seat, port"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@router.post("/seats")
+def add_seat(
+    rack_id: int = Query(...),
+    device_id: int = Query(...),
+    device_name: str = Query(default=""),
+    seat: str = Query(...),
+    port: str = Query(...),
+    remark: str = Query(default=""),
+):
+    """添加单条接口-座位映射"""
+    conn = _db()
+    conn.execute(
+        "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
+        (rack_id, device_id, device_name, seat, port, remark),
+    )
+    conn.commit()
+    sid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    return {"ok": True, "id": sid}
+
+
+@router.delete("/seats/{seat_id}")
+def del_seat(seat_id: int):
+    conn = _db()
+    conn.execute("DELETE FROM port_seats WHERE id=?", (seat_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/seats/import")
+async def import_seats(
+    rack_id: int = Query(...),
+    device_id: int = Query(...),
+    device_name: str = Query(default=""),
+    data: str = Query(default="", description="JSON 字符串: [{\"seat\":\"A01\",\"port\":\"GE0/0/1\"},...]"),
+):
+    """
+    批量导入接口-座位映射
+    数据格式（JSON 数组）或简单文本格式（每行一条：座位,端口,备注）
+    """
+    conn = _db()
+    imported = 0
+
+    # 尝试 JSON 解析
+    try:
+        items = json.loads(data)
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict) and item.get("seat") and item.get("port"):
+                    conn.execute(
+                        "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
+                        (rack_id, device_id, device_name,
+                         item["seat"], item["port"], item.get("remark", "")),
+                    )
+                    imported += 1
+    except (json.JSONDecodeError, TypeError):
+        # 非 JSON → 按纯文本逐行解析：座位,端口,备注
+        for line in data.strip().split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 2:
+                seat_val = parts[0]
+                port_val = parts[1]
+                remark_val = parts[2] if len(parts) >= 3 else ""
+                if seat_val and port_val:
+                    conn.execute(
+                        "INSERT INTO port_seats (rack_id,device_id,device_name,seat,port,remark) VALUES (?,?,?,?,?,?)",
+                        (rack_id, device_id, device_name, seat_val, port_val, remark_val),
+                    )
+                    imported += 1
+
+    conn.commit()
+    conn.close()
+    return {"ok": True, "imported": imported}
