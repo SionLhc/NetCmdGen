@@ -32,7 +32,7 @@
             <el-input v-model="host" placeholder="192.168.1.1" style="width:150px" :disabled="connected" />
           </el-form-item>
           <el-form-item label="端口">
-            <el-input-number v-model="port" :min="1" :max="65535" :disabled="connected" style="width:90px" />
+            <el-input-number v-model="port" :min="1" :max="65535" :disabled="connected" :controls="false" style="width:85px" />
           </el-form-item>
           <el-form-item label="用户名">
             <el-input v-model="username" placeholder="admin" style="width:120px" :disabled="connected" />
