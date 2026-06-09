@@ -28,10 +28,10 @@
         <el-button size="small" @click="handleUndo" title="Ctrl+Z">↩ 撤销</el-button>
         <el-button size="small" @click="handleRedo" title="Ctrl+Y">↪ 重做</el-button>
         <el-divider direction="vertical" />
-        <el-button size="small" @click="handleSave">保存</el-button>
-        <el-button size="small" @click="handleDownload">导出 JSON</el-button>
-        <el-button size="small" @click="handleImportJson">导入 JSON</el-button>
-        <el-button size="small" @click="handleExportPng">导出 PNG</el-button>
+        <el-button size="small" type="primary" @click="handleSave" :loading="autoSaving">💾 保存</el-button>
+        <el-button size="small" @click="handleImportJson">📥 导入 JSON</el-button>
+        <el-button size="small" @click="handleDownload">📤 导出 JSON</el-button>
+        <el-button size="small" @click="handleExportPng">🖼 导出 PNG</el-button>
       </div>
       <div class="toolbar-right">
         <TopoSearch @search="onTopoSearch" @filter="onTopoFilter" />
@@ -337,6 +337,7 @@ import { getTopoList, createTopo, getTopoData, saveTopoData, renameTopo, deleteT
 const topoList = ref<TopoItem[]>([])
 const currentTopoId = ref('')
 const topoLoading = ref(false)
+const autoSaving = ref(false)  // 自动保存中状态
 
 // ─── TopoStats 统计数据 ─────────────────────────────────
 const topoNodeCount = ref(0)
@@ -803,14 +804,20 @@ function initGraph() {
     },
   })
 
-  // 协作：拓扑变更时广播给同房间其他客户端
+  // ── 协作 + 自动保存 ──
+  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
   graph.on('cell:change:*', () => {
+    // 协作同步
     if (collabSocket?.readyState === WebSocket.OPEN && currentTopoId.value) {
-      collabSocket.send(JSON.stringify({
-        type: 'update',
-        room_id: currentTopoId.value,
-        data: graph.toJSON(),
-      }))
+      collabSocket.send(JSON.stringify({ type: 'update', room_id: currentTopoId.value, data: graph.toJSON() }))
+    }
+    // 自动保存：防抖 5 秒
+    if (currentTopoId.value) {
+      clearTimeout(autoSaveTimer!)
+      autoSaveTimer = setTimeout(() => {
+        autoSaving.value = true
+        saveTopoData(currentTopoId.value, graph.toJSON()).finally(() => { autoSaving.value = false })
+      }, 5000)
     }
   })
 
